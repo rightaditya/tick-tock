@@ -4,17 +4,13 @@
 The Ethernet module is used via the EBI of the board; we use chip select 2.  It uses an eight-bit data bus and a 15-bit address bus, so we use D0-D7 on the EBI for data and A1-A15 for the address.  NWR0, NRD, and NCS2 are used for WR, RD, and CS.
 
 = Register values =
+{{{
 DBW = 10 (EBI_DBW_8)
-
 NWS = 001 (EBI_NWS_2) - testing will show if we need to increase this
-
 PAGES = 00 (EBI_PAGES_1M)
-
 TDF = 001 (EBI_TDF_1)
-
 BAT = 0 (EBI_BAT_BYTE_WRITE) - I was never sure about this, but it should be right
-
 BA = 0x100 (Base address is 0x10000000)
-
+}}}
 
 = Pin diagram =
