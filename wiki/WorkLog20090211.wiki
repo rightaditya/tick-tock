@@ -1,0 +1,3 @@
+#summary Work log for February 11, 2009.
+
+* Met with Prof. Durdle, agreed to have final decision on whether or not we're going to use eCos by the next time we meet (two weeks from now).  We're going to spend one full day during reading week working.  If we get extra time we'll spend it wiring up the Ethernet module and/or LCD screen.
