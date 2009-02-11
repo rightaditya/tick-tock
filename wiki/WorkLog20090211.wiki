@@ -2,3 +2,8 @@
 #labels Log
 
   * Met with Prof. Durdle, agreed to have final decision on whether or not we're going to use eCos by the next time we meet (two weeks from now).  We're going to spend one full day during reading week working.  If we get extra time we'll spend it wiring up the Ethernet module and/or LCD screen.
+  * Submitted order to Rick for the weight sensors.
+  * Checked for op-amps - they don't have the ones in stock that were shown on the FlexiForce manual, so we need to check if the ones they do have will work.
+  * Made pin diagrams for Ethernet module and LCD.
+  * Wired up two pins.
+  * Did some more eCos stuff - need to try to get it installed next time.
