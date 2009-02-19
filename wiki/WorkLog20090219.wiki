@@ -1,0 +1,5 @@
+#summary Work log for February 19, 2009.
+#labels Log
+
+  * We're not doing eCos.
+  * Got the weight sensors and the op amp IC (33174).  Will need to ensure the op amp works as expected.
