@@ -19,4 +19,4 @@ BA = 0x100 (Base address is 0x10000000)
 
 
 = Pin diagram =
-TODO
+http://tick-tock.googlecode.com/files/cmpe490_ethernet.png
