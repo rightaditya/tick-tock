@@ -6,3 +6,5 @@
   * Got the speaker (8 ohm) and a 555 IC.
   * The weight sensor circuit is set up and working correctly (as far as we can tell).
   * The speaker circuit is set up and working correctly.  For some reason adjusting the voltage changes the frequency, but whatever.
+  * Made a prototype project ("proto") that can simply be copied and renamed to make a new project.
+  * Setup stub projects for Ethernet and NVRAM.  Right now all they do is set up the corresponding EBI registers.  These are only test projects, and once completed the code can be copied into a proper driver for use in the main program.
