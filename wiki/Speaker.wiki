@@ -1,0 +1,9 @@
+#summary Speaker circuit information.
+
+= Circuit diagram =
+The speaker is hooked up according to the right circuit in the following:
+http://tick-tock.googlecode.com/files/speaker.gif
+The image is from [http://ourworld.compuserve.com/homepages/Bill_Bowden/page10.htm here].
+
+= Notes =
+In our final circuit, pin 8 (power) will be switched (probably via a transistor) and controlled by the board.  This way the board can just use a binary output to turn the speaker on or off.
