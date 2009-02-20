@@ -2,11 +2,9 @@
 #labels Log
 
   * We're not doing eCos.
-  * Got the weight sensors and the op amp IC (33174).
-  * Got the speaker (8 ohm) and a 555 IC.
-  * The weight sensor circuit is set up and working correctly (as far as we can tell).
-  * The speaker circuit is set up and working correctly.  For some reason adjusting the voltage changes the frequency, but whatever.
+  * Got the weight sensors and the op amp IC (33174).  The circuit is set up and working correctly as far as we can tell.  Later on, we'll make a longer cable for each sensor so that we can test it over its full range (e.g. put the sensor under a chair).
+  * Got the speaker (8 ohm) and a 555 IC.  The circuit is set up and working correctly.  For some reason adjusting the voltage changes the frequency, but whatever.
   * Made a prototype project ("proto") that can simply be copied and renamed to make a new project.
-  * Setup stub projects for Ethernet and NVRAM.  Right now all they do is set up the corresponding EBI registers.  These are only test projects, and once completed the code can be copied into a proper driver for use in the main program.
-  * NVRAM test program is ready, but the NVRAM hasn't been hooked up yet.
-  * Ethernet module is hooked up except for the reset switches due to conflicting documentation.  We need to test which is active high/low and hook them up to the same switch with an inverter if necessary.
+  * Setup projects for Ethernet and NVRAM.  Right now, all the Ethernet project does is set up the corresponding EBI registers.  These are only test projects, and once completed the code can be copied into a proper driver for use in the main program.
+  * NVRAM test program is ready (more or less a copy of lab 2), but the NVRAM hasn't been wired yet.
+  * Ethernet module is wired except for the reset switches due to conflicting documentation.  We need to test which is active high/low and hook them up to the same switch with an inverter if necessary.
