@@ -2,7 +2,9 @@
 
 = Circuit diagram =
 The speaker is hooked up according to the right circuit in the following:
+
 http://tick-tock.googlecode.com/files/speaker.gif
+
 The image is from [http://ourworld.compuserve.com/homepages/Bill_Bowden/page10.htm here].
 
 = Notes =
