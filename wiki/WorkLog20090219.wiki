@@ -2,4 +2,7 @@
 #labels Log
 
   * We're not doing eCos.
-  * Got the weight sensors and the op amp IC (33174).  Will need to ensure the op amp works as expected.
+  * Got the weight sensors and the op amp IC (33174).
+  * Got the speaker (8 ohm) and a 555 IC.
+  * The weight sensor circuit is set up and working correctly (as far as we can tell).
+  * The speaker circuit is set up and working correctly.  For some reason adjusting the voltage changes the frequency, but whatever.
