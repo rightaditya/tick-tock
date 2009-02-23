@@ -8,4 +8,4 @@ http://tick-tock.googlecode.com/files/speaker.gif
 The image is from [http://ourworld.compuserve.com/homepages/Bill_Bowden/page10.htm here].
 
 = Notes =
-In our final circuit, pin 8 (power) will be switched (probably via a transistor) and controlled by the board.  This way the board can just use a binary output to turn the speaker on or off.
+We have pin 8 (power) switched so that it is turned on by an output pin (DA0) from the board.
