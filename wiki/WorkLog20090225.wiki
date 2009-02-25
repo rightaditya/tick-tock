@@ -1,0 +1,5 @@
+#summary Work log for February 25, 2009.
+
+  * Met with Prof. Durdle; we need to start focusing on the meat of the project.
+  * Got a -5V regulator.  Hooked it up and tested it; it's working fine.
+  * Started hooking up the NVRAM.  We will finish this next time (Friday) and start coding.
