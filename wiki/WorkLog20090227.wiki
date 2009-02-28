@@ -1,0 +1,6 @@
+#summary Work log for February 27, 2009.
+
+  * NVRAM is fully wired and tested; works correctly.  Had to bump the number of waits states up to 5 from 3.
+  * We're tired of all the crazy voltage levels and regulators necessary.  After some searching for a non-inverting op-amp solution (found one if necessary), I realized that since we only need three states a crude measure will suffice.  We'll use the sensors as voltage dividers with a 500kOhm resistor.
+  * All wiring is complete.  On Tuesday we can start coding.
+  * The following should be returned to the store room on Tuesday: 9V regulator (7809), -5V regulator (7905), 5V regulator (7805), and the op-amp + wire-wrap socket + label.  We should also see if we can return anything else we won't be using (LCD screens, etc.).
