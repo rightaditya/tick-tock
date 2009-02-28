@@ -12,13 +12,12 @@ void setup();
 int main()
 {
     int firstrun = 1, error = 0;
-    char *ptr = (char*)BASE_ADDRESS;
-    char *start, *end;
+    char *start = NULL, *end = NULL;
 
     setup();
 
     start = 0x0;
-    while (start < BASE_ADDRESS || end > BASE_ADDRESS + MEM_SIZE || start >= end)
+    while (start < NVR_BASE || end > NVR_BASE + MEM_SIZE || start >= end)
     {   
 	if (firstrun == 0)
 	    printf("Invalid input, please enter the addresses again...\n");
@@ -57,9 +56,7 @@ int main()
     }
     
     if (!error)
-	printf("Testing completed with no errors found.\n");
-
-    return 0;
+    printf("Testing completed with no errors found.\n");
 }
 
 void setup()
@@ -70,7 +67,7 @@ void setup()
     EBI_CSR3 |= EBI_TDF_1;
     EBI_CSR3 |= EBI_PAGES_4M;
     EBI_CSR3 |= EBI_WSE;
-    EBI_CSR3 |= EBI_NWS_3;
+    EBI_CSR3 |= EBI_NWS_5;
     EBI_CSR3 |= EBI_DBW_8;
     EBI_CSR3 |= NVR_BASE;
 }
