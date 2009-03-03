@@ -1,0 +1,3 @@
+#summary Work log for Aditya for March 3, 2009.
+
+  * NVRAM doesn't seem to retain data after extended power-down.  We may not care.
