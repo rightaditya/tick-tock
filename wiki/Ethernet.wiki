@@ -21,4 +21,4 @@ BA = 0x100 (Base address is 0x10000000)
 = Pin diagram =
 http://tick-tock.googlecode.com/files/cmpe490_ethernet.png
 
-TODO: add diode resistor values, switch diode direction, and add inverter to the reset switch that goes to ground (make sure inverter uses Vcc as input, since the reset pin won't drive anything but instead it's Vcc doing the driving)
+TODO: add diode resistor values, switch diode direction and point them to 5V instead of 3.3V, and add inverter to the reset switch that goes to ground (make sure inverter uses Vcc as input, since the reset pin won't drive anything but instead it's Vcc doing the driving)
