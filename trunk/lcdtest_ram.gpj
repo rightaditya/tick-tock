@@ -1,6 +1,0 @@
-#!gbuild
-[Program]
-	-DSEMIHOSTING
-	-DRAM
-src/main.c
-link/ram.ld
