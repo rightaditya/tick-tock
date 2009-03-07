@@ -7,7 +7,7 @@ The Ethernet module is used via the EBI of the board; we use chip select 2.  It 
 
 DBW = 10 (EBI_DBW_8)
 
-NWS = 010 (EBI_NWS_3) - testing will show if we need to increase this; the W3100A gives max tCO and tOE of 73ns for direct mode and 81 ns for indirect mode); furthermore, the internal clocked mode of the Ethernet module is for access times >= 100ns
+NWS = 110 (EBI_NWS_7)
 
 PAGES = 00 (EBI_PAGES_1M)
 
