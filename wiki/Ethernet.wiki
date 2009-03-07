@@ -7,7 +7,7 @@ The Ethernet module is used via the EBI of the board; we use chip select 2.  It 
 
 DBW = 10 (EBI_DBW_8)
 
-NWS = 010 (EBI_NWS_3)
+NWS = 101 (EBI_NWS_6)
 
 PAGES = 00 (EBI_PAGES_1M)
 
