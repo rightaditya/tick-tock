@@ -23,7 +23,7 @@ void setup()
     EBI_CSR2 |= EBI_TDF_1;
     EBI_CSR2 |= EBI_PAGES_1M;
     EBI_CSR2 |= EBI_WSE;
-    EBI_CSR2 |= EBI_NWS_5;
+    EBI_CSR2 |= EBI_NWS_6;
     EBI_CSR2 |= EBI_DBW_8;
     EBI_CSR2 |= ETH_BASE;
 }
