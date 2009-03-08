@@ -1,4 +1,5 @@
 #summary Work log for February 23, 2009.
+#labels Log
 
   * Tried to get the Ethernet module working.  Spent a long time on it and in the end it was because we forgot to get a proper common ground!
   * Got a 3.3V regulator.  Hooked it up and tested it; it's working fine.  We will still need one for -5V though.
