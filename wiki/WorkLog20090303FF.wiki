@@ -1,5 +1,4 @@
 #summary Work log for Freeman for March 3, 2009.
-#labels LCD
 
   * Tested the ez002LCD over serial connection using both minicom and the command line interface (piping commands to the serial port). Minicom did not work as intended because whatever characters it passed to the LCD were echoed on the LCD screen. Using the command line interface achieved some success. Some commands (such as clear screen) worked well, while others did not work (such as set color to green). Also, I could only pass commands using ASCII characters because we did not know how to pass hex numbers. 
   * Next time, I will investigate passing commands to the LCD through the Atmel board, using hex numbers, and try to make all commands work.
