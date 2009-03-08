@@ -1,0 +1,7 @@
+#summary Work log for Aditya for March 6, 2009.
+#labels Log
+
+  * Did all the massive rewiring (A1 to A0, A2 to A1, etc.) for both the NVRAM and Ethernet module on the address bus.
+  * NVRAM still doesn't seem to always retain data after power-down.  Could be a dead/dying battery; I think it may not matter as long as the RAM part works correctly.
+  * Got some very basic Ethernet testing going, but I need to figure out what values are appropriate for the gateway, MAC address, and subnet mask.
+  * If I hit a wall I can take a break by testing the weight sensors.
