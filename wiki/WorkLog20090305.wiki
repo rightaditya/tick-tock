@@ -1,0 +1,4 @@
+#summary Work log for Freeman for March 5, 2009.
+#labels Log
+
+  * Attempted to write a program for the Atmel board that interfaces with the LCD module through USART1. It almost worked.
