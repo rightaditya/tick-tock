@@ -1,1 +1,5 @@
 #summary Work log for Freeman for March 11, 2009.
+#labels Log
+
+    * I tested the new LCD control functions and verified that they work well with the LCD module. I was able to send commands to the LCD such as clear screen, set color and draw boxes. I started building graphics functions for creating a user interface.
+    * Next time I will complete building the graphics library for drawing a user interface on the LCD screen. If time permits, I will also test the touch functionality of the LCD module.
