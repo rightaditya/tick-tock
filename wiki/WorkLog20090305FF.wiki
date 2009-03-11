@@ -1,4 +1,5 @@
 #summary Work log for Freeman for March 5, 2009.
+#labels Log
 
   * Attempted to write a program for the Atmel board that interfaces with the LCD module through USART1. I was not able to obtain the correct connection parameters of the serial connection and as a result I was not able to connect to the LCD module.
   * Next time I will add the correct connection parameters and attempt to send strings to the LCD module through the USART connection.
