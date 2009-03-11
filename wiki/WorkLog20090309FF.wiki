@@ -1,0 +1,2 @@
+    * Used correct LCD parameters (specifically, Baud Rate = 115200) to communicate with the LCD, and was able to send commands to it. However, the code I wrote for communicating with the LCD is long and inefficient, and potentially unreliable. I therefore started to rewrite the code using simpler functions to obtain better control of the LCD module.
+    * Next time I will test if the new code works for controlling the LCD and begin writing graphics functions for drawing the user interface.
