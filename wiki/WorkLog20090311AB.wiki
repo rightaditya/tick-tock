@@ -2,3 +2,5 @@
 #labels Log
 
   * Tested ADC with just voltages - it's working fine.  The problem before may have been a common ground or other voltage problem.  I've put in an order for 2.5V regulators so we can scale the weight sensor voltage outputs properly.  Once I get that regulator I can test the weight sensors properly.
+  * I now have the Ethernet module initializing properly.  Problem was a combination of bad arithmetic (forgot to multiply by 8 to convert from byte-shift to bit-shift, and also had a bad value) and the Wiznet module's big-endianness.  My laptop can correctly choose between crossover and straight-through cables, but I'll hold on to both for now in case whatever device I use later can't make the distinction.
+  * Next time (probably Sunday or Monday) I can start looking into writing DNS and HTTP stacks.
