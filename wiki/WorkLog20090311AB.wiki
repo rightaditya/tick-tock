@@ -1,4 +1,4 @@
-#summary Work log for Aditya for March 9, 2009.
+#summary Work log for Aditya for March 11, 2009.
 #labels Log
 
   * Tested ADC with just voltages - it's working fine.  The problem before may have been a common ground or other voltage problem.  I've put in an order for 2.5V regulators so we can scale the weight sensor voltage outputs properly.  Once I get that regulator I can test the weight sensors properly.
