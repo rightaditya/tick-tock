@@ -1,13 +1,6 @@
-#summary One-sentence summary of this page.
+#summary Work log for Freeman for March 11, 2009.
 
-= Introduction =
-
-Add your content here.
-
-
-= Details =
-
-Add your content here.  Format your content with:
-  * Text in *bold* or _italic_
-  * Headings, paragraphs, and lists
-  * Automatic links to other wiki pages
+    * I completed writing the graphics library for drawing on the LCD
+    * I also implemented a simple user interface for displaying the current date, time, temperature and next scheduled alarm on the LCD, as well as a simple navigation bar
+    * I implemented the light toggle button on the navigation bar, which is used to turn on and off the LCD light
+    * Next time I will polish up the user interface as well as look in how to work with the real time clock of the board
