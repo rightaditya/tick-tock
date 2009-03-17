@@ -1,0 +1,8 @@
+#summary Interface information
+
+=Todo list=
+  * create a configuration menu
+  * add a cell phone style keyboard for typing in user name and password
+  * look into the real time clock
+  * upgrade user interface graphics (for later)
+  * make card board box enclosure (for later)
