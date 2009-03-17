@@ -1,0 +1,5 @@
+#summary Work log for Aditya for March 16, 2009.
+#labels Log
+
+  * The 2.5V regulators are in; we'll grab those later once we start actually reading the weight sensors.  We'll also grab the berg receptacles around that time along with some electrical tape so that we don't have tangled wires connecting the weight sensors.
+  * I started writing a basic DNS test program (which won't work without Internet access anyway) and I cannot for the life of me write to the transmit buffer.  I've double-checked all of my values but will do so again next time with a fresh look.  I can also start testing HTTP (maybe by setting up an HTTP server on my laptop).  It may be worth considering issuing the "send" command BEFORE copying in the data (I have no idea why) and also sending the module some data.  It may also be worth dying so I don't have to deal with this crap ;).  If Kienan and Dave get their module working, I should ask them to see how they did it.
