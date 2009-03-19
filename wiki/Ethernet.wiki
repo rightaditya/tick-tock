@@ -1,7 +1,7 @@
 #summary Info for interfacing the Ethernet module.
 
 = Basic connection information =
-The Ethernet module is used via the EBI of the board; we use chip select 2.  It uses an eight-bit data bus and a 15-bit address bus, so we use D0-D7 on the EBI for data and A1-A15 for the address.  NWR0, NRD, and NCS2 are used for WR, RD, and CS.
+The Ethernet module is used via the EBI of the board; we use chip select 2.  It uses an eight-bit data bus and a 10-bit address bus, so we use D0-D7 on the EBI for data and A0-A9 for the address.  NWR0, NRD, and NCS2 are used for WR, RD, and CS.
 
 = Register values =
 
