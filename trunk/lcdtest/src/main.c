@@ -7,12 +7,9 @@
 #include <stdio.h>
 #endif
 
-#include "main.h"
-
 //Libraries
 #include "periph/usart/lib_usart.h"
-#include "periph/rtc/lib_rtc.h"
-#include "periph/rtc/time_rtc.h
+#include "drivers/time_rtc/time_rtc.h"
 #include "parts/m55800/lib_m55800.h"
 
 //Function prototypes
@@ -27,114 +24,9 @@ void clearScreen();
 
 //Global variables
 int currentX, currentY, lightStatus;
+TimeDescRtc *myRTC;
 
 //Functions
-
-//*----------------------------------------------------------------------------   
-//* Function Name       : bcd_to_int   
-//* Object              : Translate bcd to unsigned int   
-//* Input Parameters    : <bcd> BCD value   
-//* Output Parameters   : integer value   
-//*----------------------------------------------------------------------------   
-u_int bcd_to_int( u_char bcd)   
-{   
-     return ( (bcd & 0x0F) + (((bcd & 0xF0)>>4) *10));   
-}
-
-//*----------------------------------------------------------------------------   
-//* Function Name       : int_to_bcd
-//* Object              : Translate int to bcd   
-//* Input Parameters    : <value> in int   
-//* Output Parameters   : <bcd> BCD value   
-//*----------------------------------------------------------------------------   
-u_char int_to_bcd (u_int value)   
-{   
-    char tmp[3];   
-   
-    sprintf(tmp,"%02d",value);   
-    return ((tmp[1] & 0x0F) | ((tmp[0] & 0x0F)<<4));   
-}
-
-//*----------------------------------------------------------------------------   
-//* Function Name       : RTC_init
-//* Object              : Open the rtc   
-//* Input Parameters    : none
-//* Output Parameters   : none   
-//*----------------------------------------------------------------------------   
-void RTC_init( void )   
-{   
-    //* -- Open Real Time Clock   
-    at91_rtc_open(&RTC_DESC);   
-}
-
-//*----------------------------------------------------------------------------   
-//* Function Name       : RTC_close
-//* Object              : Close the RTC   
-//* Input Parameters    : none
-//* Output Parameters   : none   
-//*----------------------------------------------------------------------------   
-void RTC_close( void )   
-{   
-    //* -- Close Real Time Clock
-    at91_rtc_close(&RTC_DESC);   
-}
-
-//*----------------------------------------------------------------------------   
-//* Function Name       : RTC_read
-//* Object              : Read rtc value   
-//* Input Parameters    : none
-//* Output Parameters   : update descriptor   
-//*----------------------------------------------------------------------------   
-void RTC_read( void )   
-{   
-    u_int time;   
-    // get time value   
-    time = at91_rtc_get_time (&RTC_DESC);
-    printf("second is: %d\n", bcd_to_int(time & RTC_MASQ_SEC));
-    /*
-    RTC_pt->time_bcd.sec = time & RTC_MASQ_SEC ;   
-    RTC_pt->time_bcd.min = (time & RTC_MASQ_MIN)>>RTC_MIN ;   
-    RTC_pt->time_bcd.hour = (time & RTC_MASQ_HOUR)>>RTC_HOUR ;   
-    RTC_pt->time_bcd.ampm = (time & RTC_MASQ_AMPM)>>RTC_AMPM ;   
-    // get calendar value   
-    time = at91_rtc_get_calendar (RTC_pt->rtc_desc);   
-    RTC_pt->time_bcd.day = (time & RTC_MASQ_DAY)>>RTC_DAY ;   
-    RTC_pt->time_bcd.month = (time & RTC_MASQ_MONTH)>>RTC_MONTH ;   
-    RTC_pt->time_bcd.year = (time & RTC_MASQ_YEAR)>>RTC_YEAR ;   
-    RTC_pt->time_bcd.cent = (time & RTC_MASQ_CENT)>>RTC_CENT;   
-    RTC_pt->time_bcd.date = (time & RTC_MASQ_DATE)>>RTC_DATE ;   
-    // translate bcd to int   
-    RTC_pt->time_int.sec = at91_bcd_int( RTC_pt->time_bcd.sec);   
-    RTC_pt->time_int.min = at91_bcd_int( RTC_pt->time_bcd.min);   
-    RTC_pt->time_int.hour = at91_bcd_int( RTC_pt->time_bcd.hour);   
-    RTC_pt->time_int.ampm = at91_bcd_int( RTC_pt->time_bcd.ampm);   
-    RTC_pt->time_int.day = at91_bcd_int( RTC_pt->time_bcd.day);   
-    RTC_pt->time_int.month = at91_bcd_int( RTC_pt->time_bcd.month);   
-    RTC_pt->time_int.year = at91_bcd_int( RTC_pt->time_bcd.year);   
-    RTC_pt->time_int.cent = at91_bcd_int( RTC_pt->time_bcd.cent);   
-    RTC_pt->time_int.date = at91_bcd_int( RTC_pt->time_bcd.date);
-    */
-}
-
-//*----------------------------------------------------------------------------   
-//* Function Name       : at91_time_rtc_write_bcd   
-//* Object              : Read rtc value   
-//* Input Parameters    : <rtc_pt> time rtc descriptor   
-//* Output Parameters   : update descriptor   
-//*----------------------------------------------------------------------------   
-void at91_time_rtc_write_bcd(TimeDescRtc *RTC_pt)   
-{   
-    if (at91_time_rtc_24mode(RTC_pt)==RTC_24_HRMOD)   
-    {   
-        //* set ampm at 0   
-        RTC_pt->time_bcd.ampm = 0;   
-    }   
-    // set time   
-    at91_rtc_set_time (RTC_pt->rtc_desc,RTC_pt->time_bcd.sec, RTC_pt->time_bcd.min, RTC_pt->time_bcd.hour, RTC_pt->time_bcd.ampm );   
-   
-    // set date   
-    at91_rtc_set_calendar (RTC_pt->rtc_desc, RTC_pt->time_bcd.cent, RTC_pt->time_bcd.year, RTC_pt->time_bcd.month, RTC_pt->time_bcd.day, RTC_pt->time_bcd.date );   
-}   
 
 //*----------------------------------------------------------------------------
 //* Function Name       : LCD_init
@@ -216,21 +108,6 @@ void selectFont(int fontNum)
 //print a string
 void printString(char* str)
 {
-/*
-    int charsLeft = strLen;
-    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
-    at91_usart_write (&USART1_DESC, 0x2D);
-    while(charsLeft != 0)
-    {
-	while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
-	at91_usart_write (&USART1_DESC, str[strLen-charsLeft]);
-	charsLeft--;
-    }
-    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
-    at91_usart_write (&USART1_DESC, 0);
-    */
-
-
     u_int   i;
     while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
     at91_usart_write (&USART1_DESC, 0x2D);
@@ -355,10 +232,11 @@ int main()
 	
     } //while(1)
     */
-    
-    RTC_init();
+    myRTC->rtc_desc = &RTC_DESC;
+    at91_time_rtc_open(myRTC);
     while(1){
-	RTC_read();
+	at91_time_rtc_read(myRTC);
+	printf("Second is: %d\n", myRTC->time_bcd.sec);
     }
     //RTC_close();
     
