@@ -3,4 +3,7 @@
 	-DSEMIHOSTING
 	-DRAM
 src/main.c
+src/wiznet/socket.c
+src/wiznet/w5300.c
 link/ram.ld
+
