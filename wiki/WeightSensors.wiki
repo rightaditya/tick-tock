@@ -6,4 +6,4 @@ We were originally going to use an op-amp, but because we only need three states
 
 = Code =
 
-  * I've made a C function that returns whether or not the alarm should be active, given lower and upper thresholds (which are determined by calibration).  The code is currently in the wttest project.
+I've made a C function that returns whether or not the alarm should be active, given lower and upper thresholds (which are determined by calibration).  The code is currently in the wttest project.
