@@ -1,0 +1,5 @@
+#summary Work log for Aditya for March 19, 2009.
+#labels Log
+
+  * Wiring the LEDs on the Ethernet module causes problems, so forget that.  I also had a strange issue where I couldn't get it to work correctly unless I hooked up a probe on the chip select line.  I've emulated this with a 10MOhm resistor and a 100pF capacitor.  This is a short-term solution.
+  * Moved the weight sensors from ADC0 to ADC1.  Channels 1 and 2 on ADC0 seem to be bad.  The sensors have been tested and are working correctly.
