@@ -1,0 +1,5 @@
+#summary Work log for Aditya for March 23, 2009.
+#labels Log
+
+  * Got the router from Nancy and have it hooked up.  With my laptop connected to it I can ping the Ethernet module.
+  * Not getting DNS replies.  Could be the port, although Wireshark said that the packets sent out were malformed (is the module's UDP not working correctly?).  Could also be that the router doesn't like to respond if it doesn't have Internet access.
