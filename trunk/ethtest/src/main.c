@@ -9,7 +9,7 @@
 #include "w5300.h"
 
 // TODO: constify
-static uint8 IP[4] = {192, 168, 0, 64};
+static uint8 IP[4] = {192, 168, 0, 101};
 static uint8 GW[4] = {192, 168, 0, 1};
 static uint8 SN[4] = {255, 255, 255, 0};
 static uint8 MAC[6] = {0x00, 0x08, 0xDC, 0x00, 111, 200};
