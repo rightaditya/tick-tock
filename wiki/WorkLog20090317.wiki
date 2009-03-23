@@ -1,5 +1,0 @@
-#summary Work log for Aditya for March 17, 2009.
-#labels Log
-
-  * Started wiring up the weight sensors.  Bah, menial work.
-  * Got a new Ethernet module - need to take out the old one (sigh) and put in the new one.
