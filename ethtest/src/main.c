@@ -44,6 +44,7 @@ int main()
     uint8 txMemConf = 64, rxMemConf = 64;
     uint8 dnsbuffer[MAX_DNS_LENGTH]; uint8 i = 0;
     uint16 *dnsbuffer16 = (uint16*)dnsbuffer;
+    uint32 len;
 
     memset(dnsbuffer, 0, MAX_DNS_LENGTH);
     
@@ -70,7 +71,7 @@ int main()
     getSUBR(SN);
     getSIPR(IP);
 
-    socket(0, Sn_MR_UDP, DNS_PORT, 0);
+    socket(0, Sn_MR_UDP, DNS_PORT << 10, 0);
 
     dnsbuffer16[i++] = DNS_HEADER_ID;
 
@@ -94,6 +95,14 @@ int main()
     dnsbuffer[i++] = bigEndianSecond(DNS_QUERY_QCLASS);
 
     sendto(0, dnsbuffer, i, GW, DNS_PORT);
+
+    while (1)
+    {
+	if ((len = getSn_RX_RSR(0)) > 0)
+	{
+	    len = recvfrom(0, dnsbuffer, len, GW, DNS_PORT);
+	}
+    }
 
     return 0;
 }
