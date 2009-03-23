@@ -1,13 +1,8 @@
-#summary One-sentence summary of this page.
+#summary Work log for Freeman for March 21, 2009.
+#labels log
 
-= Introduction =
-
-Add your content here.
-
-
-= Details =
-
-Add your content here.  Format your content with:
-  * Text in *bold* or _italic_
-  * Headings, paragraphs, and lists
-  * Automatic links to other wiki pages
+    * Figured out how to use the real time clock
+    * I was able to set the current time to the RTC and read from it, and subsequently display a ticking clock on the LCD screen
+    * I was also able to set the current date and read the date, and display date information on the LCD
+    * Function frameworks are written for syncing with date and time information on the Internet
+    * Next time I need to polish up these frameworks and include temperature reading and displays, as well as to implement the keyboard system
