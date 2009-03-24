@@ -8,7 +8,8 @@
 #include "types.h"
 #include "w5300.h"
 
-// TODO: constify
+// TODO: use DNS
+static uint8 GOOGLE[4] = {74, 125, 155, 147};
 static uint8 IP[4] = {192, 168, 0, 101};
 static uint8 GW[4] = {192, 168, 0, 1};
 static uint8 SN[4] = {255, 255, 255, 0};
@@ -33,16 +34,20 @@ static uint8 MAC[6] = {0x00, 0x08, 0xDC, 0x00, 111, 200};
 #define DNS_QUERY_QTYPE 0x01 /* get the IPv4 address */
 #define DNS_QUERY_QCLASS 0x01 /* we are on the Internet */
 
+#define HTTP_PORT 80
+
 uint8 bigEndianFirst(uint16 val);
 
 uint8 bigEndianSecond(uint16 val);
+
+uint16 endianSwap16(uint16 x);
 
 void setup();
 
 int main()
 {
     uint8 txMemConf = 64, rxMemConf = 64;
-    uint8 dnsbuffer[MAX_DNS_LENGTH]; uint8 i = 0;
+    uint8 dnsbuffer[MAX_DNS_LENGTH], google[4]; uint8 i = 0;
     uint16 *dnsbuffer16 = (uint16*)dnsbuffer;
     uint32 len;
 
@@ -71,19 +76,20 @@ int main()
     getSUBR(SN);
     getSIPR(IP);
 
+    /* DNS code */
     socket(0, Sn_MR_UDP, DNS_PORT << 10, 0);
 
-    dnsbuffer16[i++] = DNS_HEADER_ID;
+    dnsbuffer16[i++] = endianSwap16(DNS_HEADER_ID);
 
-    dnsbuffer16[i++] = DNS_HEADER_QR + DNS_HEADER_OPCODE + DNS_HEADER_AA + DNS_HEADER_TC + DNS_HEADER_RD + DNS_HEADER_RA + DNS_HEADER_Z + DNS_HEADER_RCODE;
+    dnsbuffer16[i++] = endianSwap16(DNS_HEADER_QR + DNS_HEADER_OPCODE + DNS_HEADER_AA + DNS_HEADER_TC + DNS_HEADER_RD + DNS_HEADER_RA + DNS_HEADER_Z + DNS_HEADER_RCODE);
 
-    dnsbuffer16[i++] = DNS_HEADER_QDCOUNT;
+    dnsbuffer16[i++] = endianSwap16(DNS_HEADER_QDCOUNT);
 
-    dnsbuffer16[i++] = DNS_HEADER_ANCOUNT;
+    dnsbuffer16[i++] = endianSwap16(DNS_HEADER_ANCOUNT);
     
-    dnsbuffer16[i++] = DNS_HEADER_NSCOUNT;
+    dnsbuffer16[i++] = endianSwap16(DNS_HEADER_NSCOUNT);
 
-    dnsbuffer16[i++] = DNS_HEADER_ARCOUNT;
+    dnsbuffer16[i++] = endianSwap16(DNS_HEADER_ARCOUNT);
 
     strcpy(&(dnsbuffer[i <<= 1]), DNS_QUERY_QNAME);
     i += strlen(DNS_QUERY_QNAME) + 1;
@@ -100,10 +106,16 @@ int main()
     {
 	if ((len = getSn_RX_RSR(0)) > 0)
 	{
-	    len = recvfrom(0, dnsbuffer, len, GW, DNS_PORT);
+	    len = recvfrom(0, dnsbuffer, len, GW, DNS_PORT << 10);
 	}
     }
 
+    /* HTTP code */
+    /*
+    socket(0, Sn_MR_TCP, HTTP_PORT << 9, 0);
+    connect(0, GOOGLE, HTTP_PORT);
+    */
+    
     return 0;
 }
 
@@ -130,3 +142,7 @@ uint8 bigEndianSecond(uint16 val)
     return val >> 8;
 }
 
+uint16 endianSwap16(uint16 x)
+{
+    return (x << 8) | (x >> 8);
+}
