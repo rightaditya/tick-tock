@@ -1,0 +1,7 @@
+#summary Work log for Freeman for March 24, 2009.
+#labels Log
+
+    * Spent a gazillion hours fixing the issue where the clock could not be set correctly
+    * Eventually I found that the problem was caused by not setting the century value to the calendar register and as a result getting invalid flags in the valid entry register
+    * Also completed temperature reading and display functions
+    * Next time I need to implement the weather and configuration screens (the weather screen displays today and tomorrow's temperatures as well as an icon for current weather condition; the configuration screen is for the user to input his/her Google user name and password)
