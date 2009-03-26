@@ -1,14 +1,9 @@
-#summary One-sentence summary of this page.
+#summary Work log for Freeman for March 25, 2009.
 #labels Log
 
-= Introduction =
-
-Add your content here.
-
-
-= Details =
-
-Add your content here.  Format your content with:
-  * Text in *bold* or _italic_
-  * Headings, paragraphs, and lists
-  * Automatic links to other wiki pages
+    * weather and configuration screens are implemented
+    * updated sync screen
+    * fixed all button locations and tested to make sure that all buttons work
+    * user interface is complete except the keyboard
+    * next time I need to implement the keyboard and test reading user name, password and time zone information from the user
+    * I also need to store weather icons and attempt displaying them on the weather screen
