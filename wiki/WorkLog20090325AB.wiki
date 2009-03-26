@@ -1,0 +1,4 @@
+#summary Work log for Aditya for March 25, 2009.
+#labels Log
+
+  * Receiving on the module is NOT working.  I have DNS and NTP code set up, but I can't ensure that they're working correctly without getting receive working correctly.  Things to try tomorrow include looking directly at the receive buffer, stepping through ALL the code (including the socket recvfrom code), and swapping in a brand new module if there are any (unlikely, and it's also unlikely that this is the problem since ours is brand new as well!).
