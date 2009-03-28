@@ -1,0 +1,4 @@
+#summary Work log for Aditya for March 27, 2009.
+#labels Log
+
+  * I'm leaning towards a wiring explanation for why receiving isn't working.  When the NVRAM is removed, the Ethernet module doesn't work properly - it can't find my laptop, for example.  I did some testing into where the garbled data is coming from, and it seems that the module reads the UDP header info correctly, but then starts reading wacky data - and I have no idea where this data comes from.  However, it's the same on every run.  Eventually, the Rx FIFO starts giving the actual data, but it ends up being on a subsequent recvfrom.  Since it is the same garbled bits every time, I suspect that they come from *somewhere*.  But where?
