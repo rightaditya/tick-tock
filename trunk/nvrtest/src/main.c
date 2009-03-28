@@ -12,7 +12,7 @@ void setup();
 int main()
 {
     int firstrun = 1, error = 0;
-    char *start = NULL, *end = NULL;
+    unsigned char *start = NULL, *end = NULL;
 
     setup();
 
@@ -32,7 +32,7 @@ int main()
 
     while (start < end)
     {
-	char value;
+	unsigned char value;
 	int i = 0;
 
 	*start = 0x01;
