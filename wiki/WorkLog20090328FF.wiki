@@ -1,1 +1,7 @@
 #labels Log
+Work log for Freeman for March 28, 2009.
+
+    * keyboard system for entering user name and password is completely done
+    * added connection reset functionality for the LCD usart connection as a hack to fix messed up usart connections
+    * next time I need to implement the time zone entry system, and interface user interface functions with Adit's ethernet functions to print meaningful data acquired from the Internet
+    * I also need to store weather icons and attempt displaying them on the weather screen 
