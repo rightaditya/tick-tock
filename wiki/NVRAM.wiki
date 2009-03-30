@@ -1,7 +1,7 @@
 #summary Info for interfacing the NVRAM.
 
 = Basic connection information =
-The NVRAM is used via the EBI of the board; we use chip select 3.  It uses an eight-bit data bus and a 21-bit address bus, so we use D0-D7 on the EBI for data and A1-A21 for the address.  NWR0, NRD, and NCS3 are used for WR, RD, and CS.
+The NVRAM is used via the EBI of the board; we use chip select 3.  It uses an eight-bit data bus and a 21-bit address bus, so we use D0-D7 on the EBI for data and A0-A20 for the address.  NWR0, NRD, and NCS3 are used for WR, RD, and CS.
 
 = Register values =
 
