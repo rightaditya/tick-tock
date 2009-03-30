@@ -1,5 +1,5 @@
+#summary Work log for Freeman for March 28, 2009.
 #labels Log
-Work log for Freeman for March 28, 2009.
 
     * keyboard system for entering user name and password is completely done
     * added connection reset functionality for the LCD usart connection as a hack to fix messed up usart connections
