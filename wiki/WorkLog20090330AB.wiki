@@ -3,3 +3,4 @@
 
   * I DON'T FRAKKING KNOW ANYMORE.
   * Maybe if we rewired everything piece by piece, starting with the Wiznet module and working up...
+  * And also, I can't ping the module anymore.
