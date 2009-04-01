@@ -17,7 +17,7 @@
 /**
  * SOCKET count of W5300 
  */
-#define	MAX_SOCK_NUM		1
+#define	MAX_SOCK_NUM		8
 
 
 #define __DEF_IINCHIP_DIRECT_MODE__     1    /**< Direct address mode */
