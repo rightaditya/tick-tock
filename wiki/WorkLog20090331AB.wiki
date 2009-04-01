@@ -1,0 +1,6 @@
+#summary Work log for Aditya for March 31, 2009.
+#labels Log
+
+  * DNS is working
+  * NTP works to laptop, but not for general NTP servers.  If I can't get this working fast enough, we'll have to just run NTP on the laptop.
+  * Then there's HTTP and GData.
