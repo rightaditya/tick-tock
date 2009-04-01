@@ -1181,10 +1181,9 @@ void    pppterm(uint8 *mac, uint16 sessionid)
 
 void  wait_1us(uint32 us)
 {
-   uint32 i,j;
+   uint32 i;
    for(i = 0; i < us ; i++)
    {
-      for(j = 0; j < 16; j++);
    }
 }
 
