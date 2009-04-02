@@ -1,0 +1,6 @@
+#summary Work log for Aditya for April 1, 2009.
+#labels Log
+
+  * NTP still only works to laptop.  Sending the same NTP packet from my laptop gets a proper reply.  I don't have time to try to get it working properly, so I'm going to operate under the assumption that we'll have my laptop hooked up to the router as well (and the laptop needs to be running Ubuntu, since that's where I have ntpd installed - couldn't get it working on Windows).
+  * GData requires HTTPS if doing username/password.  There isn't enough time to implement SSL/TLS/whatever; much faster is to have Freeman redo the interface to ask for Email/magic cookie.  I'll be working with this from now on.
+  * I've set up a Google account for us to use, ticktock490@gmail.com.
