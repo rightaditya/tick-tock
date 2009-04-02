@@ -37,12 +37,15 @@
 
 #define MAX_NTP_LENGTH 48
 #define NTP_PORT 123
-#define NTP_CLIENT_PORT NTP_PORT
+#define NTP_CLIENT_PORT (NTP_PORT << 9)
 
+#define MAX_HTTP_LENGTH (10 << 10)
 #define HTTP_PORT 80
 #define HTTP_CLIENT_PORT (HTTP_PORT << 9)
+#define HTTP_HEADER "GET /calendar/feeds/ticktock490%40gmail.com/private-cfbbae074cdf44d7eab836cee95940ad/basic"
 
 uint8 *dns(char *dnsname, int ipoffset);
+char *gdata(uint8 *servip);
 unsigned int ntp(uint8 *servip);
    
 static uint8 ip[4] = {192, 168, 0, 101};                   // for setting SIP register
@@ -58,8 +61,9 @@ int main()
     uint8 *servip, count = 0;
     uint8 databuf[MAX_DNS_LENGTH];
     uint8 defaultgoogle[4] = {74, 125, 155, 104};
-    uint8 defaultntp[4] = {206, 248, 142, 218};
+    //uint8 defaultntp[4] = {206, 248, 142, 218};
     unsigned int secs = 0;
+    char *gdatastuff;
 
     memset(databuf, 0, MAX_DNS_LENGTH);
 
@@ -91,130 +95,150 @@ int main()
     setSUBR(sn); // set subnet mask address
     setSIPR(ip); // set source IP address
 
-    for (count = 0; (servip = dns(NTP_SERVER_DNS_NAME, NTP_SERVER_DNS_IP_OFFSET)) == NULL || count > 10; ++count) ;
+    /*servip = dns(NTP_SERVER_DNS_NAME, NTP_SERVER_DNS_IP_OFFSET);      
 
     if (servip == NULL)
 	servip = defaultntp;
+    else if (servip[0] == 0)
+	servip = defaultntp;
+
+    printf("Returned IP: %d.%d.%d.%d\n", servip[0], servip[1], servip[2], servip[3]);*/
+
+    secs = ntp(LAPTOP);
+
+    printf("UTC time in seconds: %u\n", secs);
+
+    servip = dns(GOOGLE_DNS_NAME, GOOGLE_DNS_IP_OFFSET);
+
+    if (servip == NULL)
+	servip = defaultgoogle;
+    else if (servip[0] == 0)
+	servip = defaultgoogle;
 
     printf("Returned IP: %d.%d.%d.%d\n", servip[0], servip[1], servip[2], servip[3]);
 
-    wait_10ms(200);
+    /* Now we have the time and Google's IP.  GData time. */
 
-    for (count = 0; (secs = ntp(servip)) == 0 || count > 10; ++count) ;
-
-    printf("UTC time in seconds: %u\n", secs);
+    gdatastuff = gdata(servip);
 
     return 0;
 }
 
 uint8 *dns(char *dnsname, int ipoffset)
 {
-    uint8 i = 0, servip[4], *ret, dnsbuffer[MAX_DNS_LENGTH];
+    uint8 i = 0, servip[4], dnsbuffer[MAX_DNS_LENGTH];
     uint16 *dnsbuffer16 = (uint16 *)dnsbuffer;
     uint32 len;
     int received = 0;
+    
+    close(0);
+    socket(0, Sn_MR_UDP, DNS_CLIENT_PORT, 0);
 
-    switch (getSn_SSR(0))
+    memset(dnsbuffer, 0, MAX_DNS_LENGTH);
+
+    dnsbuffer16[i++] = SWAP16(DNS_HEADER_ID);
+    dnsbuffer16[i++] = SWAP16(DNS_HEADER_QR + DNS_HEADER_OPCODE + DNS_HEADER_AA + DNS_HEADER_TC + DNS_HEADER_RD + DNS_HEADER_RA + DNS_HEADER_Z + DNS_HEADER_RCODE);
+    dnsbuffer16[i++] = SWAP16(DNS_HEADER_QDCOUNT);
+    dnsbuffer16[i++] = SWAP16(DNS_HEADER_ANCOUNT);
+    dnsbuffer16[i++] = SWAP16(DNS_HEADER_NSCOUNT);
+    dnsbuffer16[i++] = SWAP16(DNS_HEADER_ARCOUNT);
+
+    strcpy(&(dnsbuffer[i <<= 1]), dnsname);
+    i += strlen(dnsname) + 1;
+
+    dnsbuffer[i++] = FIRSTBYTE(DNS_QUERY_QTYPE);
+    dnsbuffer[i++] = SECONDBYTE(DNS_QUERY_QTYPE);
+
+    dnsbuffer[i++] = FIRSTBYTE(DNS_QUERY_QCLASS);
+    dnsbuffer[i++] = SECONDBYTE(DNS_QUERY_QCLASS);
+
+    sendto(0, dnsbuffer, i, gw, DNS_PORT);
+
+    while (!received)
     {
-	case SOCK_UDP:
-	    memset(dnsbuffer, 0, MAX_DNS_LENGTH);
-	    
-	    dnsbuffer16[i++] = SWAP16(DNS_HEADER_ID);
-	    dnsbuffer16[i++] = SWAP16(DNS_HEADER_QR + DNS_HEADER_OPCODE + DNS_HEADER_AA + DNS_HEADER_TC + DNS_HEADER_RD + DNS_HEADER_RA + DNS_HEADER_Z + DNS_HEADER_RCODE);
-	    dnsbuffer16[i++] = SWAP16(DNS_HEADER_QDCOUNT);
-	    dnsbuffer16[i++] = SWAP16(DNS_HEADER_ANCOUNT);
-	    dnsbuffer16[i++] = SWAP16(DNS_HEADER_NSCOUNT);
-	    dnsbuffer16[i++] = SWAP16(DNS_HEADER_ARCOUNT);
+	if ((len = getSn_RX_RSR(0)) > 0)
+	{
+	    uint8 destip[4];
+	    uint16 destport;
 
-	    strcpy(&(dnsbuffer[i <<= 1]), dnsname);
-	    i += strlen(dnsname) + 1;
-
-	    dnsbuffer[i++] = FIRSTBYTE(DNS_QUERY_QTYPE);
-	    dnsbuffer[i++] = SECONDBYTE(DNS_QUERY_QTYPE);
-
-	    dnsbuffer[i++] = FIRSTBYTE(DNS_QUERY_QCLASS);
-	    dnsbuffer[i++] = SECONDBYTE(DNS_QUERY_QCLASS);
-
-	    sendto(0, dnsbuffer, i, gw, DNS_PORT);
-
-	    wait_10ms(200);
-
-	    while (!received)
-	    {
-		if ((len = getSn_RX_RSR(0)) > 0)
-		{
-		    uint8 destip[4];
-		    uint16 destport;
-	    
-		    len = recvfrom(0, dnsbuffer, len, destip, &destport);
-		    received = 1;
-		}
-	    }
-
-	    memmove(servip, dnsbuffer + ipoffset, 4);
-	    ret = servip;
-
-	    close(0);
-	    break;
-	case SOCK_CLOSED:
-	    close(0);
-	    socket(0, Sn_MR_UDP, DNS_CLIENT_PORT, 0);
-
-	    ret = NULL;
-	    break;
-	default:
-	    ret = NULL;
-	    break;
+	    len = recvfrom(0, dnsbuffer, len, destip, &destport);
+	    received = 1;
+	}
     }
 
-    return ret;
+    close(0);
+
+    memmove(servip, dnsbuffer + ipoffset, 4);
+
+    return servip;
+}
+
+char *gdata(uint8 *servip)
+{
+    uint8 databuffer[MAX_HTTP_LENGTH];
+    uint32 len, i = 0;
+    int received = 0;
+
+    close(1);
+    socket(1, Sn_MR_TCP, HTTP_CLIENT_PORT, 0);
+    connect(1, servip, HTTP_PORT);
+	    
+    if (getSn_IR(1) & Sn_IR_CON)
+	setSn_IR(1, Sn_IR_CON);
+
+    memset(databuffer, 0, MAX_HTTP_LENGTH);
+
+    strcpy(databuffer, HTTP_HEADER);
+    i += strlen(HTTP_HEADER);
+
+    send(1, databuffer, i);
+
+    while (!received)
+    {
+	if ((len = getSn_RX_RSR(1)) > 0)
+	{
+	    len = recv(1, databuffer, len);
+	    received = 1;
+	}
+    }
+    
+    disconnect(1);
+    close(1);
+
+    return 1;
 }
 
 unsigned int ntp(uint8 *servip)
 {
     uint8 ntpbuffer[MAX_NTP_LENGTH];
     uint32 len;
-    unsigned int secs = 0, *secsptr = NULL;
+    unsigned int *secsptr = NULL;
     int received = 0;
 
-    switch (getSn_SSR(0))
+    close(0);
+    socket(0, Sn_MR_UDP, NTP_CLIENT_PORT, 0);
+    
+    memset(ntpbuffer, 0, MAX_NTP_LENGTH);
+	    
+    ntpbuffer[0] = 0x1B;
+
+    sendto(0, ntpbuffer, MAX_NTP_LENGTH, servip, NTP_PORT);
+
+    while (!received)
     {
-	case SOCK_UDP:
-	    memset(ntpbuffer, 0, MAX_NTP_LENGTH);
-	    
-	    ntpbuffer[0] = 0x1B;
+	if ((len = getSn_RX_RSR(0)) > 0)
+	{
+	    uint8 destip[4];
+	    uint16 destport;
 
-	    sendto(0, ntpbuffer, MAX_NTP_LENGTH, servip, NTP_PORT);
-
-	    wait_10ms(200);
-
-	    while (!received)
-	    {
-		if ((len = getSn_RX_RSR(0)) > 0)
-		{
-		    uint8 destip[4];
-		    uint16 destport;
-	    
-		    len = recvfrom(0, ntpbuffer, len, destip, &destport);
-		    received = 1;
-		}
-	    }
-
-	    secsptr = (unsigned int *)&(ntpbuffer[40]);
-	    secs = SWAP32(*secsptr);
-
-	    close(0);
-	    break;
-	case SOCK_CLOSED:
-	    close(0);
-	    socket(0, Sn_MR_UDP, NTP_CLIENT_PORT, 0);
-
-	    secs = 0;
-	    break;
-	default:
-	    secs = 0;
-	    break;
+	    len = recvfrom(0, ntpbuffer, len, destip, &destport);
+	    received = 1;
+	}
     }
 
-    return secs;
+    close(0);
+
+    secsptr = (unsigned int *)&(ntpbuffer[40]);
+
+    return SWAP32(*secsptr);
 }
