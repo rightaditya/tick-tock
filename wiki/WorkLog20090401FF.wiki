@@ -1,5 +1,5 @@
 #summary Work log for Freeman for April 1, 2009.
 #labels Log
 
-    * flash done
-    * TODO
+    * I was able to compile the ticktock user interface program in a FLASH compatible format. Flashing the program onto the Atmel board was quick and painless, and worked on first try. However, a problem occurred. Buttons don't work anymore. It seems I have lost the touch functionality of the LCD screen.
+    * Tomorrow I need to fix this loss of touch functionality.
