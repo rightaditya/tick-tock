@@ -1,14 +1,7 @@
-#summary One-sentence summary of this page.
+#summary Work log for Freeman for April 2, 2009.
 #labels Log
 
-= Introduction =
-
-Add your content here.
-
-
-= Details =
-
-Add your content here.  Format your content with:
-  * Text in *bold* or _italic_
-  * Headings, paragraphs, and lists
-  * Automatic links to other wiki pages
+    * An explanation for the loss of touch functionality problem was found. When a touch is detected, the LCD sends an integer through the serial connection. The problem we are having now is that it appears that these integers are all shifted 16 places to the left. We are not sure what the cause of this problem is but likely it is caused by a speed change when our program is made to run from flash memory.
+    * While there is no apparent way to fix the speed problem, and implementing interrupts instead of the polling method used currently requires an unjustified amount of effort, I have made a simple fix by shifting all touch detection constants in the program to the left 16 places to match what is received over the serial connection. This has solved the problem.
+    * I was also able to wire the timer chip to the speaker and verified that the speaker works.
+    * Next time I need to make reading the time from the Internet work.
