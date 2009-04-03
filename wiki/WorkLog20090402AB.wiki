@@ -6,3 +6,4 @@
   * Tomorrow (or rather, later today...), I need to ask Nancy about using 3.3V to switch a 5V signal.  The speaker is not loud enough (and is a tad unstable), but we get both loudness and stability if we use 5V to pass the signal.
   * I'd also like to see if I can get a battery switchover circuit working.  This isn't too important, so I shouldn't spend more than an hour on it.  There is some information available [http://www.laserforums.com/forum/showthread.php?t=3331&p=44297#post44297 here].
   * We should also get the NVRAM hooked up.
+  * I'd also like to see about getting some heat shrink so that the weight sensor cables don't get tangled up so easily.
