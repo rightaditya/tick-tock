@@ -4,3 +4,5 @@
   * NTP is working to time.srv.ualberta.ca.  Google communication is working.  I did extensive testing with various combinations of parts and in the end, I determined that the difference _must_ be due to our wiring vs. Kienan and Dave's PCB.  The only real difference between the two was the presence of 2x 0.1uF capacitors on the 3.3V lines; I assumed they were for other parts and wouldn't make a difference - but I was wrong!  It looks like adding the capacitors gets the Wiznet working.
   * In terms of code, we just need to tie everything together and get it working in flash (and also modularize the code a bit and make it nicer).
   * Tomorrow (or rather, later today...), I need to ask Nancy about using 3.3V to switch a 5V signal.  The speaker is not loud enough (and is a tad unstable), but we get both loudness and stability if we use 5V to pass the signal.
+  * I'd also like to see if I can get a battery switchover circuit working.  This isn't too important, so I shouldn't spend more than an hour on it.  There is some information available [http://www.laserforums.com/forum/showthread.php?t=3331&p=44297#post44297 here].
+  * We should also get the NVRAM hooked up.
