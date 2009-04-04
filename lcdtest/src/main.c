@@ -30,6 +30,72 @@ void setColor(int color);
 void clearScreen();
 
 //Constant definitions
+//#define DEBUG_MODE	//this is defined when we are running the program from RAM
+#define FLASH_SHIFT	16 //number of places to shift touch detection constants when running in flash
+
+//the following are integers reprentating the regions of the LCD screen
+//they are used for determining which part of the screen was touched
+//the intergers in debug mode and in FLASH mode are different
+#ifdef DEBUG_MODE
+#define NUM7 		7
+#define NUM17		17
+#define NUM21		21
+#define NUM33		33
+#define NUM34		34
+#define NUM35		35
+#define NUM36		36
+#define NUM37		37
+#define NUM38		38
+#define NUM49		49
+#define NUM50		50
+#define NUM51		51
+#define NUM52		52
+#define NUM53		53
+#define NUM54		54
+#define NUM65		65
+#define NUM66		66
+#define NUM67		67
+#define NUM68		68
+#define NUM69		69
+#define NUM70		70
+#define NUM80		80
+#define NUM81		81
+#define NUM82		82
+#define NUM83		83
+#define NUM84		84
+#define NUM85		85
+#define NUM86		86
+#else
+#define NUM7		(7 << FLASH_SHIFT)
+#define NUM17		(17 << FLASH_SHIFT)
+#define NUM21		(21 << FLASH_SHIFT)
+#define NUM33		(33 << FLASH_SHIFT)
+#define NUM34		(34 << FLASH_SHIFT)
+#define NUM35		(35 << FLASH_SHIFT)
+#define NUM36		(36 << FLASH_SHIFT)
+#define NUM37		(37 << FLASH_SHIFT)
+#define NUM38		(38 << FLASH_SHIFT)
+#define NUM49		(49 << FLASH_SHIFT)
+#define NUM50		(50 << FLASH_SHIFT)
+#define NUM51		(51 << FLASH_SHIFT)
+#define NUM52		(52 << FLASH_SHIFT)
+#define NUM53		(53 << FLASH_SHIFT)
+#define NUM54		(54 << FLASH_SHIFT)
+#define NUM65		(65 << FLASH_SHIFT)
+#define NUM66		(66 << FLASH_SHIFT)
+#define NUM67		(67 << FLASH_SHIFT)
+#define NUM68		(68 << FLASH_SHIFT)
+#define NUM69		(69 << FLASH_SHIFT)
+#define NUM70		(70 << FLASH_SHIFT)
+#define NUM80		(80 << FLASH_SHIFT)
+#define NUM81		(81 << FLASH_SHIFT)
+#define NUM82		(82 << FLASH_SHIFT)
+#define NUM83		(83 << FLASH_SHIFT)
+#define NUM84		(84 << FLASH_SHIFT)
+#define NUM85		(85 << FLASH_SHIFT)
+#define NUM86		(86 << FLASH_SHIFT)
+#endif
+//the following are parameters for the LCD
 #define LCD_BAUD	115200
 #define TIMEOUT		50
 #define MCKI 		32000000
@@ -603,9 +669,9 @@ void showOptions()
 
     //button text
     setLocation(68, 33);
-    printString("Enter User Name");
+    printString("Google User Name");
     setLocation(68, 60);
-    printString("Enter Password");
+    printString("Magic Cookie");
     setLocation(68, 86);
     printString("Enter Time Zone");
     setLocation(68, 113);
@@ -646,7 +712,7 @@ void credPrint(char* credChar)
     credAdd = credChar;
     cursorFull = 1;
 	
-    printf("credString is: %s\n", credString);
+    //printf("credString is: %s\n", credString);
 }
 
 //store the current char to the credString and move the cred cursor
@@ -669,7 +735,7 @@ void credNext()
     drawLine((38 + credPosition*10) + 8, 46);
 
     cursorFull = 0;
-    printf("credString is: %s\n", credString);
+    //printf("credString is: %s\n", credString);
 
     credAdd = NULL;
 }
@@ -719,16 +785,16 @@ void credRemove()
 
 	//remove the last char from credString
 	credLength = strlen(credString);
-	printf("credLength is: %d\n", credLength);
+	//printf("credLength is: %d\n", credLength);
 	strcpy(credStringCopy, credString);
-	printf("credStringCopy is: %s\n", credStringCopy);
+	//printf("credStringCopy is: %s\n", credStringCopy);
 	memset(credString, 0, 20*sizeof(char));
 	for(count=0; count<credLength-1; count++)
 	{
 	    sprintf(credString, "%s%c", credString, credStringCopy[count]);
 	}
     }
-    printf("credString is: %s\n", credString);
+    //printf("credString is: %s\n", credString);
 }
 
 //this function draws the cell phone style keyboard
@@ -890,9 +956,28 @@ void keyboardDraw(int keyMode)
     }
 }
 
+//this function is used to print a debugging string
+void dprint(char* debug_string)
+{
+    setColor(0xFF);
+    setLocation(0, 0);
+    fillBox(240,10);
+    setColor(0xC0);
+    setLocation(0, 0);
+    selectFont(1);
+    printString(debug_string);
+}
+
 //display the username entry screen and get username input from the user
 void credEntry(int credMode)
 {
+    //this variable is used to determine whether the cursor should move forward on a key press
+    //the cursor should move forward when a different button from the previous one is pressed
+    int oldID;
+    
+    //this is a string used for debugging
+    char debug_string[40];
+    
     //this flag is used to indicate whether we are typing in
     //upper case letters, lower case letters, or numbers
     //0=lower case 1=upper case 2=numbers
@@ -918,7 +1003,8 @@ void credEntry(int credMode)
     selectFont(2);
     setColor(0xC0); //blue
     setLocation(5, 7);
-    printString("Please enter your user name:");
+    if(credMode == 0) printString("Enter your Google user name:");
+    else if(credMode == 1) printString("Enter your Magic Cookie:");
 
     //draw enter button
     setLocation(180, 0);
@@ -966,10 +1052,15 @@ void credEntry(int credMode)
     {
 	if(LCD_read(dataReceived))
 	{
-	    int oldID = id;
+	    oldID = id;
+
+	    //////////////////////////////DEBUG/////////////////////////////////
+	    sprintf(debug_string, "dataReceived is: %d\n", *dataReceived);
+	    dprint(debug_string);
+	    ////////////////////////////////////////////////////////////////////
 	    
 	    //when a button is pressed, process the command accordingly
-	    if(*dataReceived == 33 || *dataReceived == 34) //row 1 column 1
+	    if(*dataReceived == NUM33 || *dataReceived == NUM34) //row 1 column 1
 	    {
 		id = 1;
 
@@ -987,7 +1078,7 @@ void credEntry(int credMode)
 		    credPrint("1");
 		}
 	    }
-	    else if(*dataReceived == 35 || *dataReceived == 36) //row 1 column 2
+	    else if(*dataReceived == NUM35 || *dataReceived == NUM36) //row 1 column 2
 	    {
 		id = 2;
 
@@ -1011,7 +1102,7 @@ void credEntry(int credMode)
 		    credPrint("2");
 		}
 	    }
-	    else if(*dataReceived == 37 || *dataReceived == 38) //row 1 column 3
+	    else if(*dataReceived == NUM37 || *dataReceived == NUM38) //row 1 column 3
 	    {
 		id = 3;
 
@@ -1035,7 +1126,7 @@ void credEntry(int credMode)
 		    credPrint("3");
 		}
 	    }
-	    else if(*dataReceived == 49 || *dataReceived == 50) //row 2 column 1
+	    else if(*dataReceived == NUM49 || *dataReceived == NUM50) //row 2 column 1
 	    {
 		id = 4;
 
@@ -1059,7 +1150,7 @@ void credEntry(int credMode)
 		    credPrint("4");
 		}
 	    }
-	    else if(*dataReceived == 51 || *dataReceived == 52) //row 2 column 2
+	    else if(*dataReceived == NUM51 || *dataReceived == NUM52) //row 2 column 2
 	    {
 		id = 5;
 
@@ -1083,7 +1174,7 @@ void credEntry(int credMode)
 		    credPrint("5");
 		}
 	    }
-	    else if(*dataReceived == 53 || *dataReceived == 54) //row 2 column 3
+	    else if(*dataReceived == NUM53 || *dataReceived == NUM54) //row 2 column 3
 	    {
 		id = 6;
 
@@ -1107,7 +1198,7 @@ void credEntry(int credMode)
 		    credPrint("6");
 		}
 	    }
-	    else if(*dataReceived == 65 || *dataReceived == 66) //row 3 column 1
+	    else if(*dataReceived == NUM65 || *dataReceived == NUM66) //row 3 column 1
 	    {
 		id = 7;
 
@@ -1133,7 +1224,7 @@ void credEntry(int credMode)
 		    credPrint("7");
 		}
 	    }
-	    else if(*dataReceived == 67 || *dataReceived == 68) //row 3 column 2
+	    else if(*dataReceived == NUM67 || *dataReceived == NUM68) //row 3 column 2
 	    {
 		id = 8;
 
@@ -1157,7 +1248,7 @@ void credEntry(int credMode)
 		    credPrint("8");
 		}
 	    }
-	    else if(*dataReceived == 69 || *dataReceived == 70) //row 3 column 3
+	    else if(*dataReceived == NUM69 || *dataReceived == NUM70) //row 3 column 3
 	    {
 		id = 9;
 
@@ -1183,19 +1274,19 @@ void credEntry(int credMode)
 		    credPrint("9");
 		}
 	    }
-	    else if(*dataReceived == 81 || *dataReceived == 82) //row 4 column 1
+	    else if(*dataReceived == NUM81 || *dataReceived == NUM82) //row 4 column 1
 	    {
-		printf("Resetting LCD usart connection...\n");
+		//printf("Resetting LCD usart connection...\n");
 		LCD_close();
 		LCD_init();
-		printf("LCD usart connection reset\n");
+		//printf("LCD usart connection reset\n");
 		if(keyMode == 0) keyMode = 1;
 		else if(keyMode == 1) keyMode = 0;
 		else if(keyMode == 2) keyMode = 0;
 		keyboardDraw(keyMode);
 		id = 0; credNext();
 	    }
-	    else if(*dataReceived == 83 || *dataReceived == 84) //row 4 column 2
+	    else if(*dataReceived == NUM83 || *dataReceived == NUM84) //row 4 column 2
 	    {
 		if (keyMode == 0 || keyMode == 1)
 		    credNext();
@@ -1209,27 +1300,28 @@ void credEntry(int credMode)
 		    credPrint("0");
 		}
 	    }
-	    else if(*dataReceived == 85 || *dataReceived == 86) //row 4 column 3
+	    else if(*dataReceived == NUM85 || *dataReceived == NUM86) //row 4 column 3
 	    {
 		credRemove();
 	    }
-	    else if(*dataReceived <= 7) //submit button
+	    else if(*dataReceived <= NUM7) //submit button
 	    {
 		if(cursorFull == 1) sprintf(credString, "%s%s", credString, credAdd);
 				    
-		printf("The cred string is:\n");
-		printf("%s\n", credString);
 		if(credMode == 0)
 		{
 		    memset(usernameString, 0, 20*sizeof(char));
-		    strcpy(usernameString, credString);
+		    sprintf(usernameString, "%s%s", credString, "%40gmail.com");
 		}
 		else if(credMode == 1)
 		{
 		    memset(passwordString, 0, 20*sizeof(char));
 		    strcpy(passwordString, credString);
 		}
-		
+#ifdef DEBUG_MODE		
+		printf("The Google user name string is:\n");
+		printf("%s\n", usernameString);
+#endif		
 		showOptions(); //go to the options screen if the options button is pressed
 		return;
 	    }
@@ -1297,87 +1389,87 @@ void timezoneEntry()
 	if(LCD_read(dataReceived))
 	{
 	    //when a button is pressed, process the command accordingly
-	    if(*dataReceived == 33 || *dataReceived == 34) //row 1 column 1
+	    if(*dataReceived == NUM33 || *dataReceived == NUM34) //row 1 column 1
 	    {
 		credPrint("1");
 
 		credNext();
 	    }
-	    else if(*dataReceived == 35 || *dataReceived == 36) //row 1 column 2
+	    else if(*dataReceived == NUM35 || *dataReceived == NUM36) //row 1 column 2
 	    {
 		credPrint("2");
 
 		credNext();
 	    }
-	    else if(*dataReceived == 37 || *dataReceived == 38) //row 1 column 3
+	    else if(*dataReceived == NUM37 || *dataReceived == NUM38) //row 1 column 3
 	    {
 		credPrint("3");
 
 		credNext();
 	    }
-	    else if(*dataReceived == 49 || *dataReceived == 50) //row 2 column 1
+	    else if(*dataReceived == NUM49 || *dataReceived == NUM50) //row 2 column 1
 	    {
 		credPrint("4");
 
 		credNext();
 	    }
-	    else if(*dataReceived == 51 || *dataReceived == 52) //row 2 column 2
+	    else if(*dataReceived == NUM51 || *dataReceived == NUM52) //row 2 column 2
 	    {
 		credPrint("5");
 
 		credNext();
 	    }
-	    else if(*dataReceived == 53 || *dataReceived == 54) //row 2 column 3
+	    else if(*dataReceived == NUM53 || *dataReceived == NUM54) //row 2 column 3
 	    {
 		credPrint("6");
 
 		credNext();
 	    }
-	    else if(*dataReceived == 65 || *dataReceived == 66) //row 3 column 1
+	    else if(*dataReceived == NUM65 || *dataReceived == NUM66) //row 3 column 1
 	    {
 		credPrint("7");
 
 		credNext();
 	    }
-	    else if(*dataReceived == 67 || *dataReceived == 68) //row 3 column 2
+	    else if(*dataReceived == NUM67 || *dataReceived == NUM68) //row 3 column 2
 	    {
 		credPrint("8");
 
 		credNext();
 	    }
-	    else if(*dataReceived == 69 || *dataReceived == 70) //row 3 column 3
+	    else if(*dataReceived == NUM69 || *dataReceived == NUM70) //row 3 column 3
 	    {
 		credPrint("9");
 
 		credNext();
 	    }
-	    else if(*dataReceived == 81 || *dataReceived == 82) //row 4 column 1
+	    else if(*dataReceived == NUM81 || *dataReceived == NUM82) //row 4 column 1
 	    {
 		tzSign *= -1;
-		printf("Resetting LCD usart connection...\n");
+		//printf("Resetting LCD usart connection...\n");
 		LCD_close();
 		LCD_init();
-		printf("LCD usart connection reset\n");
+		//printf("LCD usart connection reset\n");
 		if(tzKeyMode == 3) tzKeyMode = 4;
 		else if(tzKeyMode == 4) tzKeyMode = 3;
 		keyboardDraw(tzKeyMode);
 	    }
-	    else if(*dataReceived == 83 || *dataReceived == 84) //row 4 column 2
+	    else if(*dataReceived == NUM83 || *dataReceived == NUM84) //row 4 column 2
 	    {
 		credPrint("0");
 
 		credNext();
 	    }
-	    else if(*dataReceived == 85 || *dataReceived == 86) //row 4 column 3
+	    else if(*dataReceived == NUM85 || *dataReceived == NUM86) //row 4 column 3
 	    {
 		credRemove();
 	    }
-	    else if(*dataReceived <= 7) //submit button
+	    else if(*dataReceived <= NUM7) //submit button
 	    {
 		if(cursorFull == 1) sprintf(credString, "%s%s", credString, credAdd);
 				    
-		printf("The timezone string is:\n");
-		printf("%s\n", credString);
+		//printf("The timezone string is:\n");
+		//printf("%s\n", credString);
 
 		tzShift = tzSign * atoi(credString);
 		
@@ -1391,6 +1483,9 @@ void timezoneEntry()
 //the main function containing the main loop
 int main()
 {
+    //this is a string used for debugging
+    char debug_string[40];
+    
     //this variable stores data received from the LCD
     u_int* dataReceived;
 
@@ -1400,7 +1495,7 @@ int main()
 
     //make space for the various string
     credString = (char *)calloc(20, sizeof(char));
-    usernameString = (char *)calloc(20, sizeof(char));
+    usernameString = (char *)calloc(40, sizeof(char));
     passwordString = (char *)calloc(20, sizeof(char));
 
     //init the LCD over the usart
@@ -1430,32 +1525,33 @@ int main()
 	    //read button press data from the LCD
 	    if(LCD_read(dataReceived))
 	    {
-		if(*dataReceived <= 38)
+		//////////////////////////////DEBUG/////////////////////////////////
+		sprintf(debug_string, "dataReceived is: %d\n", *dataReceived);
+		dprint(debug_string);
+		////////////////////////////////////////////////////////////////////
+	
+		if(*dataReceived <= NUM38)
 		{
-		    printf("Resetting LCD usart connection...\n");
+		    //printf("Resetting LCD usart connection...\n");
 		    LCD_close();
 		    LCD_init();
-		    printf("LCD usart connection reset\n");
+		    //printf("LCD usart connection reset\n");
 		}
 		//toggle the LCD light when the light button is pressed
-		if(*dataReceived == 80 || *dataReceived == 81)
+		if(*dataReceived == NUM80 || *dataReceived == NUM81)
 		{
-		    //wait for pen up byte
-		    selectFont(2);
-		    setColor(0xC0);
-		    setLocation(1, 131);
-		    fillBox(59, 28);
-		    while (LCD_read(dataReceived) && *dataReceived != 255) {}
-		    setColor(0xFF);
-		    setLocation(1, 131);
-		    fillBox(59, 28);
 		    //toggle light and button text
+		    selectFont(2);
+ 		    setColor(0xFF);
+ 		    setLocation(1, 131);
+		    fillBox(59, 28);
+		    setColor(0xC0); //blue
+		    setLocation(8, 138);
 		    if(lightStatus == 0)
 		    {
 			lightOn();
 			lightStatus = 1;
-			setColor(0xC0); //blue
-			setLocation(8, 138);
+			
 			printString("Light Off");
 		    }
 		    else
@@ -1467,19 +1563,19 @@ int main()
 			printString("Light On");
 		    }
 		}
-		else if(*dataReceived == 82 || *dataReceived == 83)
+		else if(*dataReceived == NUM82 || *dataReceived == NUM83)
 		{
 		    currentMode = 1; //update to weather mode
 		    showWeather(); //go to the weather screen
 		    continue;
 		}
-		else if(*dataReceived == 84)
+		else if(*dataReceived == NUM84)
 		{
 		    currentMode = 2; //update to options mode
 		    showOptions(); //go to the options screen if the options button is pressed
 		    continue;
 		}
-		else if(*dataReceived == 85 || *dataReceived == 86)
+		else if(*dataReceived == NUM85 || *dataReceived == NUM86)
 		{
 		    sync();
 		    mainScreen();
@@ -1505,7 +1601,7 @@ int main()
 	    if(LCD_read(dataReceived))
 	    {
 		//if the back to main screen button is pressed, go back to the main screen
-		if(*dataReceived >= 80 && *dataReceived <= 86)
+		if(*dataReceived >= NUM80 && *dataReceived <= NUM86)
 		{
 		    currentMode = 0;
 		    // display the main screen
@@ -1521,22 +1617,22 @@ int main()
 	    if(LCD_read(dataReceived))
 	    {
 		//if username button is pressed, prompt user to enter username
-		if(*dataReceived == 17 || *dataReceived == 18 || *dataReceived == 19 || *dataReceived == 20 || *dataReceived == 21)
+		if(*dataReceived >= NUM17 && *dataReceived <= NUM21)
 		{
 		    credEntry(0);
 		}
 		//if password button is pressed, prompt user to enter password
-		else if(*dataReceived == 33 || *dataReceived == 34 || *dataReceived == 35 || *dataReceived == 36 || *dataReceived == 37)
+		else if(*dataReceived >= NUM33 && *dataReceived <= NUM37)
 		{
 		    credEntry(1);
 		}
 		//if time zone button is pressed, prompt user to enter time zone
-		else if(*dataReceived == 49 || *dataReceived == 50 || *dataReceived == 51 || *dataReceived == 52 || *dataReceived == 53)
+		else if(*dataReceived >= NUM49 && *dataReceived <= NUM53)
 		{
 		    timezoneEntry();
 		}
 		//if back button is pressed, go back to the main screen
-		else if(*dataReceived == 65 || *dataReceived == 66 || *dataReceived == 67 || *dataReceived == 68 || *dataReceived == 69)
+		else if(*dataReceived >= NUM65 && *dataReceived <= NUM69)
 		{
 		    currentMode = 0;
 		    // display the main screen
