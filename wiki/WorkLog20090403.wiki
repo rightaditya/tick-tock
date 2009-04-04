@@ -1,0 +1,4 @@
+#summary Work log for April 3, 2009.
+#labels Log
+
+  * We have done a good deal of integration.  We still need to fix touch, fix timezone, fix date, get it working in flash, get the alarms set up, integrate the weight sensors, and write our report and plan our presentation and demo.  Testing would also be nice.
