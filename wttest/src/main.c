@@ -65,9 +65,9 @@ int activateAlarm(double lowerThresh, double upperThresh)
 
     if (sensor < lowerThresh || sensor > upperThresh)
 	retVal = 1;
-    else
-	retVal = 0;
 
+    printf("%f\n", sensor);
+    
     return retVal;
 }
 
