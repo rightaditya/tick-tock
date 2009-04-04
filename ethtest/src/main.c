@@ -1,5 +1,7 @@
 #include <string.h>
+
 #include "parts/m55800/reg_m55800.h"
+
 #include "types.h"
 #include "socket.h"
 
@@ -9,6 +11,14 @@
 
 #define FIRSTBYTE(D) ((D & 0xFF00) >> 8)
 #define SECONDBYTE(D) (D & 0x00FF)
+
+#define NVR_BASE 0x20000000
+#define NVR_SIZE 0x200000
+#define NVR_USERNAME (NVR_BASE + 10)
+#define NVR_PASSWORD (NVR_BASE + 50)
+#define NVR_ALARMS (NVR_BASE + 100)
+#define NVR_BUFFER_AREA (NVR_BASE + (NVR_SIZE >> 1))
+#define NVR_BUFFER_SIZE (NVR_BASE + NVR_SIZE - NVR_BUFFER_AREA)
 
 #define MAX_DNS_LENGTH 512
 #define DNS_PORT 53
@@ -43,23 +53,30 @@
 #define MAX_HTTP_LENGTH (20 << 10)
 #define HTTP_PORT 80
 #define HTTP_CLIENT_PORT (HTTP_PORT << 9)
-#define HTTP_HEADER_PRE_EMAIL "GET /calendar/feeds/"
-#define HTTP_HEADER_POST_EMAIL "/private-"
+#define HTTP_HEADER_PRE_USER "GET /calendar/feeds/"
+#define HTTP_HEADER_POST_USER "%40gmail.com/private-"
 #define HTTP_HEADER_POST_COOKIE "/basic HTTP/1.1\r\nHOST: www.google.com\r\n\r\n"
 
-#define GMAIL_EMAIL "ticktock490%40gmail.com"
+#define GMAIL_USER "ticktock490"
 #define GMAIL_MAGIC_COOKIE "cfbbae074cdf44d7eab836cee95940ad"
 
 #define ALARM_ACTIVE_STRING "Alarm Active"
 
+typedef struct
+{
+    int year, month, day, starthour, startminute, endhour, endminute;
+} Alarm;
+
 void dns(char *dnsname, int ipoffset, uint8 *servip);
-int gcal(uint8 *servip, char *gmail, char *password, char *databuffer); /* for now, password is magic cookie */
+int gcal(uint8 *servip, char *bigbuffer); /* for now, password is magic cookie */
 unsigned int ntp(uint8 *servip);
    
 static uint8 ip[4] = {192, 168, 0, 101};                   // for setting SIP register
 static uint8 gw[4] = {192, 168, 0, 1};                     // for setting GAR register
 static uint8 sn[4] = {255, 255, 255, 0};                     // for setting SUBR register
 static uint8 mac[6] = {0x00, 0x08, 0xDC, 0x00, 111, 200};      // for setting SHAR register
+
+int numberOfAlarms;
 
 int main()
 {
@@ -70,13 +87,12 @@ int main()
     uint8 defaultgoogle[4] = {74, 125, 53, 103};
     uint8 servip[4];
     unsigned int secs = 0;
-    char gdata[MAX_HTTP_LENGTH];
+    char *bigbuffer = (char *)NVR_BUFFER_AREA;
     int gdatasize = 0;
     char *sptr;
 
     memmove(ntpdnsfixed, NTP_SERVER_DNS_NAME, 22); ntpdnsfixed[9] = 8;
     memset(servip, 0, 4);
-    memset(gdata, 0, MAX_HTTP_LENGTH);
 
     /* Set up the Wiznet on the EBI */
     EBI_CSR2 = 0x00000000;
@@ -106,6 +122,17 @@ int main()
     setSUBR(sn); // set subnet mask address
     setSIPR(ip); // set source IP address
 
+    /* set up the NVRAM on the EBI */
+    EBI_CSR3 = 0x00000000;
+    EBI_CSR3 |= EBI_CSEN;
+    EBI_CSR3 |= EBI_BAT_BYTE_WRITE;
+    EBI_CSR3 |= EBI_TDF_1;
+    EBI_CSR3 |= EBI_PAGES_4M;
+    EBI_CSR3 |= EBI_WSE;
+    EBI_CSR3 |= EBI_NWS_5;
+    EBI_CSR3 |= EBI_DBW_8;
+    EBI_CSR3 |= NVR_BASE;
+
     dns(ntpdnsfixed, NTP_SERVER_DNS_IP_OFFSET, servip);
 
     printf("Returned IP: %d.%d.%d.%d\n", servip[0], servip[1], servip[2], servip[3]);    
@@ -124,93 +151,101 @@ int main()
     if (servip[0] == 0)
 	memmove(servip, defaultgoogle, 4);
 
-    gdatasize = gcal(servip, GMAIL_EMAIL, GMAIL_MAGIC_COOKIE, gdata);
+    /* When doing this actually, store the username and password in NVR */
+    strcpy((char *)NVR_USERNAME, GMAIL_USER);
+    strcpy((char *)NVR_PASSWORD, GMAIL_MAGIC_COOKIE);
+
+    gdatasize = gcal(servip, bigbuffer);
 
     if (gdatasize < 0)
 	printf("Got too many bytes from Google!\n");
     else
     {
+	Alarm *alarm = (Alarm *)NVR_ALARMS;
+	
 	printf("Got %d bytes from Google\n", gdatasize);
     
-	sptr = strstr(gdata, ALARM_ACTIVE_STRING);
+	sptr = strstr(bigbuffer, ALARM_ACTIVE_STRING);
     
 	while (sptr != NULL)
 	{
-	    int month = 0, day = 0, year = 0, starth = 0, endh = 0, startm = 0, endm = 0;
 	    char *monthptr, *sptr2;
+
+	    memset(alarm, 0, sizeof(Alarm));
 	    
 	    sptr = strstr(sptr, "When: ");
 
 	    monthptr = sptr + 10;
 
 	    if (strncmp(monthptr, "Jan", 3) == 0)
-		month = 1;
+		alarm->month = 1;
 	    else if (strncmp(monthptr, "Feb", 3) == 0)
-		month = 2;
+		alarm->month = 2;
 	    else if (strncmp(monthptr, "Mar", 3) == 0)
-		month = 3;
+		alarm->month = 3;
 	    else if (strncmp(monthptr, "Apr", 3) == 0)
-		month = 4;
+		alarm->month = 4;
 	    else if (strncmp(monthptr, "May", 3) == 0)
-		month = 5;
+		alarm->month = 5;
 	    else if (strncmp(monthptr, "Jun", 3) == 0)
-		month = 6;
+		alarm->month = 6;
 	    else if (strncmp(monthptr, "Jul", 3) == 0)
-		month = 7;
+		alarm->month = 7;
 	    else if (strncmp(monthptr, "Aug", 3) == 0)
-		month = 8;
+		alarm->month = 8;
 	    else if (strncmp(monthptr, "Sep", 3) == 0)
-		month = 9;
+		alarm->month = 9;
 	    else if (strncmp(monthptr, "Oct", 3) == 0)
-		month = 10;
+		alarm->month = 10;
 	    else if (strncmp(monthptr, "Nov", 3) == 0)
-		month = 11;
+		alarm->month = 11;
 	    else if (strncmp(monthptr, "Dec", 3) == 0)
-		month = 12;
+		alarm->month = 12;
 	    
-	    day = atoi(sptr + 14);
+	    alarm->day = atoi(sptr + 14);
 
 	    sptr = strchr(sptr, ',');
 
-	    year = atoi(sptr + 2);
-	    starth = atoi(sptr + 7);
+	    alarm->year = atoi(sptr + 2);
+	    alarm->starthour = atoi(sptr + 7);
 
 	    sptr2 = strchr(sptr, ':');
 	    if (sptr2 != NULL && (sptr2 < strstr(sptr, "to")))
-		startm = atoi(sptr2 + 1);
+		alarm->startminute = atoi(sptr2 + 1);
 
 	    sptr = strstr(sptr, "to");
 
-	    endh = atoi(sptr + 3);
+	    alarm->endhour = atoi(sptr + 3);
 
 	    sptr2 = strchr(sptr, ':');
 	    if (sptr2 != NULL)
-		endm = atoi(sptr2 + 1);
+		alarm->endminute = atoi(sptr2 + 1);
 
 	    if (strncmp(sptr - 3, "pm", 2) == 0)
-		starth += 12;
+		alarm->starthour += 12;
 
 	    sptr = strstr(sptr, "&amp;nbsp;");
 
 	    if (strncmp(sptr - 2, "pm", 2) == 0)
-		endh += 12;
+		alarm->endhour += 12;
 
-	    if (starth % 12 == 0)
-		starth -= 12;
-	    if (endh % 12 == 0)
-		endh -= 12;
+	    if (alarm->starthour % 12 == 0)
+		alarm->starthour -= 12;
+	    if (alarm->endhour % 12 == 0)
+		alarm->endhour -= 12;
 
 	    sptr = strstr(sptr, ALARM_ACTIVE_STRING);
 
-	    printf("Month: %d\n", month);
-	    printf("Day: %d\n", day);
-	    printf("Year: %d\n", year);
-	    printf("Starth: %d\n", starth);
-	    printf("Startm: %d\n", startm);
-	    printf("Endh: %d\n", endh);
-	    printf("Endm: %d\n", endm);
+	    printf("Month: %d\n", alarm->month);
+	    printf("Day: %d\n", alarm->day);
+	    printf("Year: %d\n", alarm->year);
+	    printf("Starth: %d\n", alarm->starthour);
+	    printf("Startm: %d\n", alarm->startminute);
+	    printf("Endh: %d\n", alarm->endhour);
+	    printf("Endm: %d\n", alarm->endminute);
 
-	    /* TODO: save */
+	    ++alarm;
+	    ++numberOfAlarms;
 	}
     }
 
@@ -236,7 +271,7 @@ void dns(char *dnsname, int ipoffset, uint8 *servip)
     dnsbuffer16[i++] = SWAP16(DNS_HEADER_NSCOUNT);
     dnsbuffer16[i++] = SWAP16(DNS_HEADER_ARCOUNT);
 
-    strcpy(&(dnsbuffer[i <<= 1]), dnsname);
+    strcpy((char *)(&(dnsbuffer[i <<= 1])), dnsname);
     i += strlen(dnsname) + 1;
 
     dnsbuffer[i++] = FIRSTBYTE(DNS_QUERY_QTYPE);
@@ -264,10 +299,13 @@ void dns(char *dnsname, int ipoffset, uint8 *servip)
     memmove(servip, dnsbuffer + ipoffset, 4);
 }
 
-int gcal(uint8 *servip, char *gmail, char *password, char *databuffer)
+int gcal(uint8 *servip, char *bigbuffer)
 {
     uint32 len;
     int i = 0, count = 0;
+    char databuffer[MAX_HTTP_LENGTH];
+    
+    memset(databuffer, 0, MAX_HTTP_LENGTH);
 
     close(1);
     socket(1, Sn_MR_TCP, HTTP_CLIENT_PORT, 0);
@@ -278,40 +316,48 @@ int gcal(uint8 *servip, char *gmail, char *password, char *databuffer)
 
     memset(databuffer, 0, MAX_HTTP_LENGTH);
 
-    strcpy(databuffer, HTTP_HEADER_PRE_EMAIL);
-    i += strlen(HTTP_HEADER_PRE_EMAIL);
+    strcpy(databuffer, HTTP_HEADER_PRE_USER);
+    i += strlen(HTTP_HEADER_PRE_USER);
 
-    strcpy(databuffer + i, gmail);
-    i += strlen(gmail);
+    strcpy(databuffer + i, (char *)NVR_USERNAME);
+    i += strlen((char *)NVR_USERNAME);
 
-    strcpy(databuffer + i, HTTP_HEADER_POST_EMAIL);
-    i += strlen(HTTP_HEADER_POST_EMAIL);
+    strcpy(databuffer + i, HTTP_HEADER_POST_USER);
+    i += strlen(HTTP_HEADER_POST_USER);
 
-    strcpy(databuffer + i, password);
-    i += strlen(password);
+    strcpy(databuffer + i, (char *)NVR_PASSWORD);
+    i += strlen((char *)NVR_PASSWORD);
 
     strcpy(databuffer + i, HTTP_HEADER_POST_COOKIE);
     i += strlen(HTTP_HEADER_POST_COOKIE);
 
     wait_10ms(10);
 
-    send(1, databuffer, i);
+    send(1, (uint8 *)databuffer, i);
 
     i = 0;
     while (count < 10 && i >= 0)
     {
 	if ((len = getSn_RX_RSR(1)) > 0)
 	{
-	    if ((i + len) > MAX_HTTP_LENGTH)
+	    len = recv(1, (uint8 *)databuffer, len);
+
+	    if (i + len > NVR_BUFFER_SIZE)
 		i = -1;
 	    else
-		i += recv(1, databuffer + i, len);
+	    {
+		memmove(bigbuffer + i, databuffer, len);
+		i += len;
+	    }
 	}
 	else
 	    ++count;
 
 	wait_10ms(10);
     }
+
+    bigbuffer[i] = 0;
+    ++i;
     
     disconnect(1);
     close(1);
