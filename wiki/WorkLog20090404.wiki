@@ -9,7 +9,7 @@
   * So we still need to:
     * Try to fix the LCD touch screw-ups button, pressing it never works and always hits Options or Light.  Same goes for the "Back" button in the text entry screens.
     * Add an eight-hour buffer period for all syncs except the first so that any calendar changes before eight hours from sync time are ignored - and the user should be allowed to change the timezone but this can't be allowed to affect when the alarm will go off (if it was originally going to occur within the next eight hours)
-    * Fix the date (12 AM incorrectly displays as 12 PM - I've hardcoded the time so that it is set to a 12AM-range time)
+    * Do full testing of everything: alarms, touch, username/password/timezone, etc.
     * Get the program into flash
     * Write the report
     * Get the presentation done and plan the demo
