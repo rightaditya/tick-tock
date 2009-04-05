@@ -18,3 +18,5 @@ flash
 report
 
 presentation + demo
+
+sync every hour
