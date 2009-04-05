@@ -7,6 +7,7 @@
   * Synchronizing is being done on the hour, every hour.
   * Alarms are being read properly, but there still isn't an eight-hour buffer.
   * So we still need to:
+    * Freeman: make sure you execute "svn update" while in a terminal in the ethtest directory.  Otherwise you'll be working with old code.
     * Try to fix the LCD touch screw-ups, pressing "Sync" never works and always hits Options or Light.  Same goes for the "Back" button in the text entry screens.  Maybe the numbers have changed?
     * Add an eight-hour buffer period for all syncs except the first so that any calendar changes before eight hours from sync time are ignored - and the user should be allowed to change the timezone but this can't be allowed to affect when the alarm will go off (if it was originally going to occur within the next eight hours)
     * Do full testing of everything: alarms, touch, username/password/timezone, etc.
