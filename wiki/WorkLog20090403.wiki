@@ -11,7 +11,7 @@ fix date (done)
 
 alarms
 
-weight sensors
+weight sensors (done)
 
 flash
 
