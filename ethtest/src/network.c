@@ -7,7 +7,7 @@
 
 #include "main.h"
 
-int numberOfAlarms;
+extern int numberOfAlarms;
 
 void dns(char *dnsname, int ipoffset, uint8 *servip);
 int gcal(uint8 *servip, char *bigbuffer); /* for now, password is magic cookie */
@@ -93,6 +93,7 @@ unsigned int netSync()
 
     gdatasize = gcal(servip, bigbuffer);
 
+    numberOfAlarms = 0;
     if (gdatasize < 0)
 	printf("Got too many bytes from Google!\n");
     else
@@ -172,14 +173,6 @@ unsigned int netSync()
 
 	    sptr = strstr(sptr, ALARM_ACTIVE_STRING);
 
-	    printf("Month: %d\n", alarm->month);
-	    printf("Day: %d\n", alarm->day);
-	    printf("Year: %d\n", alarm->year);
-	    printf("Starth: %d\n", alarm->starthour);
-	    printf("Startm: %d\n", alarm->startminute);
-	    printf("Endh: %d\n", alarm->endhour);
-	    printf("Endm: %d\n", alarm->endminute);
-
 	    ++alarm;
 	    ++numberOfAlarms;
 	}
@@ -239,7 +232,7 @@ int gcal(uint8 *servip, char *bigbuffer)
 {
     uint32 len;
     int i = 0, count = 0;
-    char databuffer[MAX_HTTP_LENGTH];
+    char databuffer[MAX_HTTP_LENGTH], *username = (char *)NVR_USERNAME, *password = (char *)NVR_PASSWORD;
     
     memset(databuffer, 0, MAX_HTTP_LENGTH);
 
@@ -255,14 +248,14 @@ int gcal(uint8 *servip, char *bigbuffer)
     strcpy(databuffer, HTTP_HEADER_PRE_USER);
     i += strlen(HTTP_HEADER_PRE_USER);
 
-    strcpy(databuffer + i, (char *)NVR_USERNAME);
-    i += strlen((char *)NVR_USERNAME);
+    strcpy(databuffer + i, username);
+    i += strlen(username);
 
     strcpy(databuffer + i, HTTP_HEADER_POST_USER);
     i += strlen(HTTP_HEADER_POST_USER);
 
-    strcpy(databuffer + i, (char *)NVR_PASSWORD);
-    i += strlen((char *)NVR_PASSWORD);
+    strcpy(databuffer + i, password);
+    i += strlen(password);
 
     strcpy(databuffer + i, HTTP_HEADER_POST_COOKIE);
     i += strlen(HTTP_HEADER_POST_COOKIE);

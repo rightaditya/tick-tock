@@ -7,24 +7,11 @@
 
 #include "main.h"
 
-
-
 int alarmActive(double lowerThresh, double upperThresh);
 void beepOff();
 void beepOn();
 
-int weight_main()
-{   
-    while (1)
-    {
-	if (alarmActive(400, 2000))
-	    beepOn();
-	else
-	    beepOff();
-    }
-    
-    return 0;
-}
+extern int alarmSounding;
 
 void setupWeightSensors()
 {
@@ -68,8 +55,6 @@ int alarmActive(double lowerThresh, double upperThresh)
 
     if (sensor < lowerThresh || sensor > upperThresh)
 	retVal = 1;
-
-    //printf("%f\n", sensor);
     
     return retVal;
 }
@@ -77,9 +62,11 @@ int alarmActive(double lowerThresh, double upperThresh)
 void beepOff()
 {
     at91_pio_write(&PIOB_DESC, PIOB0_MASK, PIO_CLEAR_OUT);
+    alarmSounding = 0;
 }
 
 void beepOn()
 {
     at91_pio_write(&PIOB_DESC, PIOB0_MASK, PIO_SET_OUT);
+    alarmSounding = 1;
 }

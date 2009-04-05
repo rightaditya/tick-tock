@@ -35,11 +35,12 @@ int currentX, currentY, lightStatus; //for drawing on the LCD screen
 TimeDescRtc *myRTC; //for storing time and date information
 int oldSecond; //flag for indicating time display should be updated
 int oldDate; //flag for indicating date display should be updated
-//these variables are used to save the date and time of the next alarm deduced from calendar info read online
-int alarmYear, alarmMonth, alarmDate, alarmHour, alarmMinute, alarmAMPM;
+//these variables are used to save the date and time of the current and next alarms
+Alarm currentAlarm, nextAlarm;
+int numberOfAlarms;
 //this signal is used to control the external speaker
-//the speaker sounds if soundAlarm has a value of 1
-int soundAlarm;
+//the speaker is sounding if alarmSounding is true
+int alarmSounding;
 //this variable is used to indicate which screen we are in
 int currentMode; //0=main 1=weather 2=options 3=sync
 //this variable is used to indicate where to print a character when entering credentials
@@ -57,7 +58,24 @@ char* credAdd;
 //this flag is used to indicate whether a char appears above the cursor when entering a credString
 int cursorFull;
 
+// alarm lower and upper thresholds for weight
+const double LOWER_THRESHOLD = 550, UPPER_THRESHOLD = 2250;
+
 //Functions
+
+//turn on the LCD light
+void lightOn()
+{
+    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
+    at91_usart_write (&USART1_DESC, 0x22);
+}
+
+//turn off the LCD light
+void lightOff()
+{
+    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
+    at91_usart_write (&USART1_DESC, 0x23);
+}
 
 //this function opens a usart connection to the LCD
 void LCD_init ( void )
@@ -65,6 +83,8 @@ void LCD_init ( void )
     u_short cd_baud; 
     cd_baud=MCKI/(LCD_BAUD*16);
     at91_usart_open(&USART1_DESC, US_ASYNC_MODE, cd_baud, 0);
+
+    lightOff();
 }
 
 //this function closes the usart connection to the LCD
@@ -161,20 +181,6 @@ void drawLine(int x, int y)
     at91_usart_write (&USART1_DESC, y);
 }
 
-//turn on the LCD light
-void lightOn()
-{
-    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
-    at91_usart_write (&USART1_DESC, 0x22);
-}
-
-//turn off the LCD light
-void lightOff()
-{
-    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
-    at91_usart_write (&USART1_DESC, 0x23);
-}
-
 //read a byte from the LCD
 int LCD_read(u_int* value)
 {
@@ -196,8 +202,8 @@ void dateTimeInit()
     myRTC->rtc_desc = &RTC_DESC;
     // open the RTC
     at91_time_rtc_open(myRTC);
-    // set to 12 hour mode
-    at91_rtc_set_24(myRTC);
+    // set to 24-hour mode
+    at91_rtc_set_24(myRTC->rtc_desc);
 }
 
 //this function closes the RTC
@@ -213,12 +219,48 @@ void dateTimeRead()
     at91_time_rtc_read(myRTC);
 }
 
-void checkRtcValidity()
+void updateNextAlarm()
 {
-    unsigned int rtcValid = at91_time_rtc_validity(myRTC);
-    if(rtcValid & 0x0000000c > 0)
-	printf("ERROR: INVALID TIME/DATE IN RTC\n");
-    return;
+    Alarm *alarm = (Alarm *)NVR_ALARMS;
+    memset(&nextAlarm, 0, sizeof(Alarm));
+    
+    if (numberOfAlarms > 0)
+    {
+	int i = 0;
+
+	for (i = 0; i < numberOfAlarms; ++i)
+	{
+	    int alarmInPast = 0;
+
+	    /* make sure alarm isn't in the past */
+	    if (alarm[i].year < (myRTC->time_int.year + myRTC->time_int.cent * 100))
+		alarmInPast = 1;
+	    else if (alarm[i].month < myRTC->time_int.month)
+		alarmInPast = 1;
+	    else if (alarm[i].day < myRTC->time_int.date)
+		alarmInPast = 1;
+	    else if (alarm[i].starthour < myRTC->time_int.hour)
+		alarmInPast = 1;
+	    else if (alarm[i].startminute <= myRTC->time_int.min)
+		alarmInPast = 1;
+	    
+	    if (!alarmInPast)
+	    {
+		if (nextAlarm.year == 0)
+		    nextAlarm = alarm[i];
+		else if (alarm[i].year < nextAlarm.year)
+		    nextAlarm = alarm[i];
+		else if (alarm[i].month < nextAlarm.month)
+		    nextAlarm = alarm[i];
+		else if (alarm[i].day < nextAlarm.day)
+		    nextAlarm = alarm[i];
+		else if (alarm[i].starthour < nextAlarm.starthour)
+		    nextAlarm = alarm[i];
+		else if (alarm[i].startminute < nextAlarm.startminute)
+		    nextAlarm = alarm[i];
+	    }
+	}
+    }
 }
 
 //this function synchronizes time, date and calendar info with Internet source
@@ -228,7 +270,7 @@ void sync()
     unsigned int secsSince20090401;
 	
     //these variables are used to save the date and time values read online
-    int currentYear, currentMonth, currentDate, currentDay, currentHour, currentMinute, currentSecond, currentAMPM;
+    int currentYear, currentMonth, currentDate, currentDay, currentHour, currentMinute, currentSecond;//, currentAMPM;
 
     //clear the screen first
     clearScreen();
@@ -245,7 +287,8 @@ void sync()
     UTCsecs = netSync();
 
     secsSince20090401 = (UTCsecs - SECSUPTO20090401) + 60 * 60 * (*tzShift); // + 60 * 60 * (*tzShift)
-    secsSince20090401 = 353374 - 3600;
+
+    //secsSince20090401 = 353374 - 7200;
 
     //read time and date values online
     currentYear = (secsSince20090401/86400) / 365 + 2009;
@@ -279,67 +322,27 @@ void sync()
     currentMinute = (secsSince20090401/60) % 60;
     currentSecond = secsSince20090401 % 60;
 
-    if(!at91_rtc_get_24(myRTC))
-    {
-	if(currentHour == 0)
-	{
-	    currentHour = 12;
-	    currentAMPM = 0; //AM
-	}
-	else if(currentHour >= 1 && currentHour <= 11)
-	{
-	    currentAMPM = 0;
-	}
-	else if(currentHour == 12)
-	{
-	    currentAMPM = 1; //PM
-	}
-	else if(currentHour >= 13 && currentHour <= 23)
-	{
-	    currentHour -= 12;
-	    currentAMPM = 1;
-	}
-    }
-    else
-    {
-	currentAMPM = 0;
-    }
-
-    /*read weather information online
-    todayTempLow = 15;
-    todayTempHigh = 27;
-    todayCondition = 0;
-    tomorrowTempLow = 8;
-    tomorrowTempHigh = 24;
-    tomorrowCondition = 1; */
-
-    //read next alarm information online
-    alarmYear = 2009;
-    alarmMonth = 4; // 1 to 12
-    alarmDate = 4; // 1 to 31
-    alarmHour = 23; // 0 to 12
-    alarmMinute = 36; // 0 to 59
-
-    myRTC->time_int.cent = 20;
-    myRTC->time_int.year = currentYear - 2000;
+    myRTC->time_int.cent = currentYear / 100;
+    myRTC->time_int.year = currentYear - myRTC->time_int.cent * 100;
     myRTC->time_int.month = currentMonth;
     myRTC->time_int.date = currentDate;
     myRTC->time_int.day = currentDay;
     myRTC->time_int.hour = currentHour;
     myRTC->time_int.min = currentMinute;
     myRTC->time_int.sec = currentSecond;
-    myRTC->time_int.ampm = currentAMPM;
+    //myRTC->time_int.ampm = currentAMPM;
 
     at91_time_rtc_write(myRTC);
-    //printf("Datetime input valid? %d\n", at91_time_rtc_validity(myRTC));
-    checkRtcValidity();
+    
+    updateNextAlarm();
 }
 
-void updateTZ()
+void updateTZ(int newTZ)
 {
     //these variables are used to save the date and time values
-    int currentYear, currentMonth, currentDate, currentDay, currentHour;
+    int currentYear, currentMonth, currentDate, currentDay, currentHour, oldTZ = *tzShift;
 
+    *tzShift = newTZ;
     //clear the screen first
     clearScreen();
 
@@ -355,7 +358,7 @@ void updateTZ()
     currentMonth = myRTC->time_int.month;
     currentDate = myRTC->time_int.date;
     currentDay = myRTC->time_int.day;
-    currentHour = myRTC->time_int.hour += *tzShift;
+    currentHour = myRTC->time_int.hour += *tzShift - oldTZ;
 
     if(currentHour < 0)
     {
@@ -413,7 +416,6 @@ void updateTZ()
     myRTC->time_int.year = currentYear;
     
     at91_time_rtc_write(myRTC);
-    //printf("Datetime input valid? %d\n", at91_time_rtc_validity(myRTC));
 }
 
 //this function prints the current time on the LCD screen
@@ -508,25 +510,25 @@ void printDate()
     switch(myRTC->time_int.day)
     {
 	case(1):
-	    sprintf(dateString, "Monday, %s %d, %d", month, myRTC->time_int.date, 2000 + myRTC->time_int.year);
+	    sprintf(dateString, "Monday, %s %d, %d", month, myRTC->time_int.date, myRTC->time_int.cent * 100 + myRTC->time_int.year);
 	    break;
 	case(2):
-	    sprintf(dateString, "Tuesday, %s %d, %d", month, myRTC->time_int.date, 2000 + myRTC->time_int.year);
+	    sprintf(dateString, "Tuesday, %s %d, %d", month, myRTC->time_int.date, myRTC->time_int.cent * 100 + myRTC->time_int.year);
 	    break;
 	case(3):
-	    sprintf(dateString, "Wednesday, %s %d, %d", month, myRTC->time_int.date, 2000 + myRTC->time_int.year);
+	    sprintf(dateString, "Wednesday, %s %d, %d", month, myRTC->time_int.date, myRTC->time_int.cent * 100 + myRTC->time_int.year);
 	    break;
 	case(4):
-	    sprintf(dateString, "Thursday, %s %d, %d", month, myRTC->time_int.date, 2000 + myRTC->time_int.year);
+	    sprintf(dateString, "Thursday, %s %d, %d", month, myRTC->time_int.date, myRTC->time_int.cent * 100 + myRTC->time_int.year);
 	    break;
 	case(5):
-	    sprintf(dateString, "Friday, %s %d, %d", month, myRTC->time_int.date, 2000 + myRTC->time_int.year);
+	    sprintf(dateString, "Friday, %s %d, %d", month, myRTC->time_int.date, myRTC->time_int.cent * 100 + myRTC->time_int.year);
 	    break;
 	case(6):
-	    sprintf(dateString, "Saturday, %s %d, %d", month, myRTC->time_int.date, 2000 + myRTC->time_int.year);
+	    sprintf(dateString, "Saturday, %s %d, %d", month, myRTC->time_int.date, myRTC->time_int.cent * 100 + myRTC->time_int.year);
 	    break;
 	case(7):
-	    sprintf(dateString, "Sunday, %s %d, %d", month, myRTC->time_int.date, 2000 + myRTC->time_int.year);
+	    sprintf(dateString, "Sunday, %s %d, %d", month, myRTC->time_int.date, myRTC->time_int.cent * 100 + myRTC->time_int.year);
 	    break;
         default:
 	    break;
@@ -542,86 +544,91 @@ void printDate()
     oldDate = myRTC->time_int.date; //save the current date
 }
 
-//this function prints today's high and low temperatures on the LCD screen
+//this function prints the next alarm information
 void printNextAlarm()
 {
-    int alarmHourDisplay;
-    int alarmAMPMDisplay;
-    
-    //these are used to store the month and next alarm strings
-    char month[4];
     char nextAlarmString[34];
     
+    if (nextAlarm.year == 0)
+	strcpy(nextAlarmString, "Next alarm: none");
+    else
+    {
+	int alarmHourDisplay;
+	int alarmAMPMDisplay;
+	
+	//these are used to store the month and next alarm strings
+	char month[4];
+	
+	//build the text string for the month
+	switch(nextAlarm.month)
+	{
+	    case(1):
+		sprintf(month, "Jan");
+		break;
+	    case(2):
+		sprintf(month, "Feb");
+		break;
+	    case(3):
+		sprintf(month, "Mar");
+		break;
+	    case(4):
+		sprintf(month, "Apr");
+		break;
+	    case(5):
+		sprintf(month, "May");
+		break;
+	    case(6):
+		sprintf(month, "Jun");
+		break;
+	    case(7):
+		sprintf(month, "Jul");
+		break;
+	    case(8):
+		sprintf(month, "Aug");
+		break;
+	    case(9):
+		sprintf(month, "Sep");
+		break;
+	    case(10):
+		sprintf(month, "Oct");
+		break;
+	    case(11):
+		sprintf(month, "Nov");
+		break;
+	    case(12):
+		sprintf(month, "Dec");
+		break;
+	    default:
+		break;
+	}
+    
+	if(nextAlarm.starthour == 0)
+	{
+	    alarmHourDisplay = 12;
+	    alarmAMPMDisplay = 0; //AM
+	}
+	else if(nextAlarm.starthour >= 1 && nextAlarm.starthour <= 11)
+	{
+	    alarmHourDisplay = nextAlarm.starthour;
+	    alarmAMPMDisplay = 0;
+	}
+	else if(nextAlarm.starthour == 12)
+	{
+	    alarmHourDisplay = 12;
+	    alarmAMPMDisplay = 1; //PM
+	}
+	else if(nextAlarm.starthour >= 13 && nextAlarm.starthour <= 23)
+	{
+	    alarmHourDisplay = nextAlarm.starthour - 12;
+	    alarmAMPMDisplay = 1;
+	}
+    
+	sprintf(nextAlarmString, "Next alarm: %02d:%02d %s, %s %d", alarmHourDisplay, nextAlarm.startminute, alarmAMPMDisplay ? "PM" : "AM", month, nextAlarm.day);
+    }
+
     setColor(0xC0); //blue
     selectFont(2);
     setLocation(50, 105);
-    //build the text string for the month
-    switch(alarmMonth)
-    {
-	case(1):
-	    sprintf(month, "Jan");
-	    break;
-	case(2):
-	    sprintf(month, "Feb");
-	    break;
-	case(3):
-	    sprintf(month, "Mar");
-	    break;
-	case(4):
-	    sprintf(month, "Apr");
-	    break;
-	case(5):
-	    sprintf(month, "May");
-	    break;
-	case(6):
-	    sprintf(month, "Jun");
-	    break;
-	case(7):
-	    sprintf(month, "Jul");
-	    break;
-	case(8):
-	    sprintf(month, "Aug");
-	    break;
-	case(9):
-	    sprintf(month, "Sep");
-	    break;
-	case(10):
-	    sprintf(month, "Oct");
-	    break;
-	case(11):
-	    sprintf(month, "Nov");
-	    break;
-	case(12):
-	    sprintf(month, "Dec");
-	    break;
-	default:
-	    break;
-    }
-
-    if(alarmHour == 0)
-    {
-	alarmHourDisplay = 12;
-	alarmAMPMDisplay = 0; //AM
-    }
-    else if(alarmHour >= 1 && alarmHour <= 11)
-    {
-	alarmHourDisplay = alarmHour;
-	alarmAMPMDisplay = 0;
-    }
-    else if(alarmHour == 12)
-    {
-	alarmHourDisplay = 12;
-	alarmAMPMDisplay = 1; //PM
-    }
-    else if(alarmHour >= 13 && alarmHour <= 23)
-    {
-	alarmHourDisplay = alarmHour - 12;
-	alarmAMPMDisplay = 1;
-    }
-
-    if(alarmAMPMDisplay == 0)
-	sprintf(nextAlarmString, "Next Alarm: %d:%dAM, %s %d", alarmHourDisplay, alarmMinute, month, alarmDate);
-    else sprintf(nextAlarmString, "Next Alarm: %d:%dPM, %s %d", alarmHourDisplay, alarmMinute, month, alarmDate);
     printString(nextAlarmString);
 }
 
@@ -666,62 +673,6 @@ void drawNavBar()
     printString("Sync");
 }
 
-//check if the current date and time matches the alarm date and time
-//also check if the weight sensor signal is asserted
-//if the weight sensor signal is asserted anytime within 15 minutes after the alarm
-//set off the alarm
-void checkAlarm()
-{
-    if(!at91_rtc_get_24(myRTC))
-    {
-	//RTC in 12 hour mode
-    }
-    else
-    {
-	//RTC in 24 hour mode, do nothing
-	alarmAMPM = 0;
-    }
-    /*
-    printf("currentYear = %d\n", myRTC->time_int.year);
-    printf("alarmYear = %d\n", (alarmYear-2000));
-    printf("currentMonth = %d\n", myRTC->time_int.month);
-    printf("alarmMonth = %d\n", alarmMonth);
-    printf("currentDate = %d\n", myRTC->time_int.date);
-    printf("alarmDate = %d\n", alarmDate);
-    printf("currentHour = %d\n", myRTC->time_int.hour);
-    printf("alarmHour = %d\n", alarmHour);
-    printf("currentMin = %d\n", myRTC->time_int.min);
-    printf("alarmMinute = %d\n", alarmMinute);
-    printf("currentAMPM = %d\n", myRTC->time_int.ampm);
-    printf("alarmAMPM = %d\n", alarmAMPM);
-    */
-    
-    if (!alarmActive(400, 2000)) return;
-    if(soundAlarm == 1) {
-	if(myRTC->time_int.min > alarmMinute + 0)
-	{
-	    beepOff();
-	    soundAlarm = 0;
-	    printTitle(0);
-	    return;
-	}
-	else if(myRTC->time_int.min < alarmMinute && ((60 - alarmMinute) + myRTC->time_int.min) > 0)
-	{
-	    beepOff();
-	    soundAlarm = 0;
-	    printTitle(0);
-	    return;
-	}
-	return;
-    }
-    if(myRTC->time_int.year==(alarmYear-2000) && myRTC->time_int.month==alarmMonth && myRTC->time_int.date==alarmDate && myRTC->time_int.hour==alarmHour && myRTC->time_int.min==alarmMinute && myRTC->time_int.ampm==alarmAMPM)
-    {
-	beepOn();
-	soundAlarm = 1; //this sounds the alarm
-	printTitle(1);
-    }
-}
-
 //this displays the main screen
 void mainScreen()
 {
@@ -746,6 +697,58 @@ void mainScreen()
 
     //draw the bottom nav bar
     drawNavBar();
+}
+
+//check if the alarm should be on
+void doAlarm()
+{
+    int alarmShouldBeOn = 0;
+
+    if (currentAlarm.year == 0) /* if no current alarm is set */
+    {
+	if (nextAlarm.year != 0) /* if there is a next alarm */
+	{
+	    if ((nextAlarm.year % 100 == myRTC->time_int.year) &&
+		(nextAlarm.month == myRTC->time_int.month) &&
+		(nextAlarm.day == myRTC->time_int.date) &&
+		(nextAlarm.starthour == myRTC->time_int.hour) &&
+		(nextAlarm.startminute == myRTC->time_int.min))
+	    {
+		currentAlarm = nextAlarm;
+
+		if (alarmActive(LOWER_THRESHOLD, UPPER_THRESHOLD))
+		    alarmShouldBeOn = 1;
+
+		updateNextAlarm(); mainScreen();
+	    }
+	}
+    }
+    else
+    {
+	/* check if alarm period is over */
+	if ((currentAlarm.endhour <= myRTC->time_int.hour) && (currentAlarm.endminute <= myRTC->time_int.min))
+	{
+	    memset(&currentAlarm, 0, sizeof(Alarm));
+
+	    alarmShouldBeOn = 0; /* since alarmShouldBeOn defaults to zero, this is just to be clear */
+	}
+	else
+	{
+	    if (alarmActive(LOWER_THRESHOLD, UPPER_THRESHOLD))
+		alarmShouldBeOn = 1;
+	}
+    }
+
+    if (alarmShouldBeOn && !alarmSounding)
+    {
+	beepOn();
+	printTitle(1);
+    }
+    else if (!alarmShouldBeOn && alarmSounding)
+    {
+	beepOff();
+	printTitle(0);
+    }
 }
 
 //display the options screen and allow the user the change program options
@@ -815,8 +818,6 @@ void credPrint(char* credChar)
     printString(credChar);
     credAdd = credChar;
     cursorFull = 1;
-	
-    //printf("credString is: %s\n", credString);
 }
 
 //store the current char to the credString and move the cred cursor
@@ -839,7 +840,6 @@ void credNext()
     drawLine((38 + credPosition*10) + 8, 46);
 
     cursorFull = 0;
-    //printf("credString is: %s\n", credString);
 
     credAdd = NULL;
 }
@@ -889,16 +889,13 @@ void credRemove()
 
 	//remove the last char from credString
 	credLength = strlen(credString);
-	//printf("credLength is: %d\n", credLength);
 	strcpy(credStringCopy, credString);
-	//printf("credStringCopy is: %s\n", credStringCopy);
 	memset(credString, 0, 20*sizeof(char));
 	for(count=0; count<credLength-1; count++)
 	{
 	    sprintf(credString, "%s%c", credString, credStringCopy[count]);
 	}
     }
-    //printf("credString is: %s\n", credString);
 }
 
 //this function draws the cell phone style keyboard
@@ -1080,7 +1077,7 @@ void credEntry(int credMode)
     int oldID;
     
     //this is a string used for debugging
-    char debug_string[40];
+    //char debug_string[40];
     
     //this flag is used to indicate whether we are typing in
     //upper case letters, lower case letters, or numbers
@@ -1159,8 +1156,8 @@ void credEntry(int credMode)
 	    oldID = id;
 
 	    //////////////////////////////DEBUG/////////////////////////////////
-	    sprintf(debug_string, "dataReceived is: %d\n", *dataReceived);
-	    dprint(debug_string);
+	    //sprintf(debug_string, "dataReceived is: %d\n", *dataReceived);
+	    //dprint(debug_string);
 	    ////////////////////////////////////////////////////////////////////
 	    
 	    //when a button is pressed, process the command accordingly
@@ -1571,13 +1568,8 @@ void timezoneEntry()
 	    else if(*dataReceived <= NUM7) //submit button
 	    {
 		if(cursorFull == 1) sprintf(credString, "%s%s", credString, credAdd);
-				    
-		//printf("The timezone string is:\n");
-		//printf("%s\n", credString);
 
-		*tzShift = tzSign * atoi(credString);
-
-		updateTZ();
+		updateTZ(tzSign * atoi(credString));
 		
 		showOptions(); //go to the options screen if the options button is pressed
 		
@@ -1591,13 +1583,13 @@ void timezoneEntry()
 int main()
 {
     //this is a string used for debugging
-    char debug_string[40];
+    //char debug_string[40];
     
     //this variable stores data received from the LCD
     u_int* dataReceived;
 
     //initialize flags, turn off alarm and set mode to main screen
-    soundAlarm = 0;
+    alarmSounding = 0;
     currentMode = 0;
 
     //make space for the various string
@@ -1636,8 +1628,8 @@ int main()
 	    if(LCD_read(dataReceived))
 	    {
 		//////////////////////////////DEBUG/////////////////////////////////
-		sprintf(debug_string, "dataReceived is: %d\n", *dataReceived);
-		dprint(debug_string);
+		//sprintf(debug_string, "dataReceived is: %d\n", *dataReceived);
+		//dprint(debug_string);
 		////////////////////////////////////////////////////////////////////
 	
 		if(*dataReceived <= NUM38)
@@ -1691,8 +1683,6 @@ int main()
 		    mainScreen();
 		}
 	    }
-
-	    checkRtcValidity();
     
 	    //read current date and time
 	    dateTimeRead();
@@ -1707,8 +1697,8 @@ int main()
 	    if (myRTC->time_int.min == 0)
 		sync();
     
-	    //check if the alarm should be set off
-	    checkAlarm();
+	    // do alarm work
+	    doAlarm();
 	} //end of currentMode == 0 (main screen)
 
 	if(currentMode == 1) //implements the functionality of the weather screen
