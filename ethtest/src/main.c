@@ -1,401 +1,1764 @@
-#include <string.h>
+//*----------------------------------------------------------------------------
+//* TICK-TOCK Project Main Program
+//*
+//* Freeman Fan, Aditya Bhargava
+//* CMPE 490 Winter Term 2009
+//*
+//* This program provides a variety of touch screen LCD control functions
+//* including drawing shapes and printing strings on the LCD screen.
+//* Also included are functions that set and read from the Real Time Clock
+//* on the Atmel board and display date, time, weather and alarm information
+//* on the screen.
+//*
+//* Together, these functions are used to create a user interface for the
+//* TICK-TOCK device, which is built and constantly updated in a main loop
+//* inside the main() function.
+//*----------------------------------------------------------------------------
 
-#include "parts/m55800/reg_m55800.h"
+#ifdef SEMIHOSTING
+#include <stdio.h>
+#endif
 
-#include "types.h"
-#include "socket.h"
+//Libraries
+#include "drivers/time_rtc/time_rtc.h"
+#include "parts/m55800/lib_m55800.h"
+#include "periph/usart/lib_usart.h"
 
-#define SWAP8(A) (A)
-#define SWAP16(A) ((((A << 8) & 0xFF00)) | ((A >> 8) & 0x00FF))
-#define SWAP32(A) ((((A << 24) & 0xFF000000)) | (((A << 8) & 0x00FF0000)) | (((A >> 8) & 0x0000FF00)) | (((A >> 24) & 0x000000FF)))
+#include "main.h"
 
-#define FIRSTBYTE(D) ((D & 0xFF00) >> 8)
-#define SECONDBYTE(D) (D & 0x00FF)
+//Function prototypes
+void LCD_init (void);
+void setColor(int color);
+void clearScreen();
 
-#define NVR_BASE 0x20000000
-#define NVR_SIZE 0x200000
-#define NVR_USERNAME (NVR_BASE + 10)
-#define NVR_PASSWORD (NVR_BASE + 50)
-#define NVR_ALARMS (NVR_BASE + 100)
-#define NVR_BUFFER_AREA (NVR_BASE + (NVR_SIZE >> 1))
-#define NVR_BUFFER_SIZE (NVR_BASE + NVR_SIZE - NVR_BUFFER_AREA)
+int currentX, currentY, lightStatus; //for drawing on the LCD screen
+TimeDescRtc *myRTC; //for storing time and date information
+int oldSecond; //flag for indicating time display should be updated
+int oldDate; //flag for indicating date display should be updated
+//these variables are used to save the date and time of the next alarm deduced from calendar info read online
+int alarmYear, alarmMonth, alarmDate, alarmHour, alarmMinute, alarmAMPM;
+//this signal is used to control the external speaker
+//the speaker sounds if soundAlarm has a value of 1
+int soundAlarm;
+//this variable is used to indicate which screen we are in
+int currentMode; //0=main 1=weather 2=options 3=sync
+//this variable is used to indicate where to print a character when entering credentials
+int credPosition;
+//this variable stores the timezone shift
+int *tzShift = (int *)NVR_TZSHIFT;
+//this variable stores the temporary credential string (and now also timezone --AB)
+char* credString;
+//this variable stores the username string
+char* usernameString = (char *)NVR_USERNAME;
+//this variable stores the password string
+char* passwordString = (char *)NVR_PASSWORD;
+//this variable stores the next character to be appended to the end of a credential string
+char* credAdd;
+//this flag is used to indicate whether a char appears above the cursor when entering a credString
+int cursorFull;
 
-#define MAX_DNS_LENGTH 512
-#define DNS_PORT 53
-#define DNS_CLIENT_PORT (DNS_PORT << 10)
-#define DNS_HEADER_ID 0x10AB
-#define DNS_HEADER_QR ((0x0 << 15) & 0x8000) /* query */
-#define DNS_HEADER_OPCODE ((0x0 << 11) & 0x7800) /* standard query */
-#define DNS_HEADER_AA ((0x0 << 10) & 0x0400) /* not authoritative */
-#define DNS_HEADER_TC ((0x0 << 9) & 0x0200) /* not truncated */
-#define DNS_HEADER_RD ((0x1 << 8) & 0x0100) /* recursion desired */
-#define DNS_HEADER_RA ((0x0 << 7) & 0x0080) /* no recursion available */
-#define DNS_HEADER_Z ((0x0 << 4) & 0x0070)
-#define DNS_HEADER_RCODE (0x0 & 0x000F)
-#define DNS_HEADER_QDCOUNT 0x01 /* 1 query */
-#define DNS_HEADER_ANCOUNT 0x00
-#define DNS_HEADER_NSCOUNT 0x00
-#define DNS_HEADER_ARCOUNT 0x00
-#define DNS_QUERY_QTYPE 0x01 /* get the IPv4 address */
-#define DNS_QUERY_QCLASS 0x01 /* we are on the Internet */
+//Functions
 
-#define NTP_SERVER_DNS_NAME "\4time\3srv8ualberta\2ca" /* string literal automatically has \0 at the end */
-#define GOOGLE_DNS_NAME "\3www\6google\3com"
-
-#define NTP_SERVER_DNS_IP_OFFSET 0x46
-#define GOOGLE_DNS_IP_OFFSET 0x40
-#define ECE_DNS_IP_OFFSET 0x43
-
-#define MAX_NTP_LENGTH 48
-#define NTP_PORT 123
-#define NTP_CLIENT_PORT (NTP_PORT << 9)
-
-#define MAX_HTTP_LENGTH (20 << 10)
-#define HTTP_PORT 80
-#define HTTP_CLIENT_PORT (HTTP_PORT << 9)
-#define HTTP_HEADER_PRE_USER "GET /calendar/feeds/"
-#define HTTP_HEADER_POST_USER "%40gmail.com/private-"
-#define HTTP_HEADER_POST_COOKIE "/basic HTTP/1.1\r\nHOST: www.google.com\r\n\r\n"
-
-#define GMAIL_USER "ticktock490"
-#define GMAIL_MAGIC_COOKIE "cfbbae074cdf44d7eab836cee95940ad"
-
-#define ALARM_ACTIVE_STRING "Alarm Active"
-
-typedef struct
+//this function opens a usart connection to the LCD
+void LCD_init ( void )
 {
-    int year, month, day, starthour, startminute, endhour, endminute;
-} Alarm;
+    u_short cd_baud; 
+    cd_baud=MCKI/(LCD_BAUD*16);
+    at91_usart_open(&USART1_DESC, US_ASYNC_MODE, cd_baud, 0);
+}
 
-void dns(char *dnsname, int ipoffset, uint8 *servip);
-int gcal(uint8 *servip, char *bigbuffer); /* for now, password is magic cookie */
-unsigned int ntp(uint8 *servip);
-   
-static uint8 ip[4] = {192, 168, 0, 101};                   // for setting SIP register
-static uint8 gw[4] = {192, 168, 0, 1};                     // for setting GAR register
-static uint8 sn[4] = {255, 255, 255, 0};                     // for setting SUBR register
-static uint8 mac[6] = {0x00, 0x08, 0xDC, 0x00, 111, 200};      // for setting SHAR register
-
-int numberOfAlarms;
-
-int main()
+//this function closes the usart connection to the LCD
+void LCD_close()
 {
-    uint8 tx_mem_conf[8] = {8, 8, 8, 8, 8, 8, 8, 8};          // for setting TMSR regsiter
-    uint8 rx_mem_conf[8] = {8, 8, 8, 8, 8, 8, 8, 8};          // for setting RMSR regsiter
-    char ntpdnsfixed[22]; /* the \8 doesn't register properly, so need to fix it */
-    uint8 defaultntp[4] = {129, 128, 5, 210};
-    uint8 defaultgoogle[4] = {74, 125, 53, 103};
-    uint8 servip[4];
-    unsigned int secs = 0;
-    char *bigbuffer = (char *)NVR_BUFFER_AREA;
-    int gdatasize = 0;
-    char *sptr;
+    at91_usart_close(&USART1_DESC);
+}
+    
+//set the entire screen to the current color
+void clearScreen()
+{
+    setColor(0xFF);
+    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
+    at91_usart_write (&USART1_DESC, 0x21); //clear screen
+}
 
-    memmove(ntpdnsfixed, NTP_SERVER_DNS_NAME, 22); ntpdnsfixed[9] = 8;
-    memset(servip, 0, 4);
+//set current color to color, use a two digit hex number
+//format is BBGGGRRR in binary
+void setColor(int color)
+{
+    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
+    at91_usart_write (&USART1_DESC, 0x24); //set color
+    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
+    at91_usart_write (&USART1_DESC, color); //to green
+}
 
-    /* Set up the Wiznet on the EBI */
-    EBI_CSR2 = 0x00000000;
-    EBI_CSR2 |= EBI_CSEN;
-    EBI_CSR2 |= EBI_BAT_BYTE_SELECT;
-    EBI_CSR2 |= EBI_TDF_1;
-    EBI_CSR2 |= EBI_PAGES_1M;
-    EBI_CSR2 |= EBI_WSE;
-    EBI_CSR2 |= EBI_NWS_8;
-    EBI_CSR2 |= EBI_DBW_16;
-    EBI_CSR2 |= __DEF_IINCHIP_MAP_BASE__;
-   
-    /* initiate W5300 */
-    iinchip_init();  
+//draw a box at current location
+void drawBox(int width, int height)
+{
+    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
+    at91_usart_write (&USART1_DESC, 0x42); //draw box
+    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
+    at91_usart_write (&USART1_DESC, currentX + width - 1); //width
+    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
+    at91_usart_write (&USART1_DESC, currentY + height - 1); //height
+}
 
-    /* allocate internal TX/RX Memory of W5300 */
-    if(!sysinit(tx_mem_conf,rx_mem_conf))           
-    {
-       printf("MEMORY CONFIG ERR.\r\n");
-       while(1);
+//draw a box at current location filled with current color
+void fillBox(int width, int height)
+{
+    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
+    at91_usart_write (&USART1_DESC, 0x43); //draw box
+    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
+    at91_usart_write (&USART1_DESC, currentX + width - 1); //width
+    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
+    at91_usart_write (&USART1_DESC, currentY + height - 1); //height
+}
+
+//set the current location
+void setLocation(int x, int y)
+{
+    currentX = x;
+    currentY = y;
+    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
+    at91_usart_write (&USART1_DESC, 0x25);
+    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
+    at91_usart_write (&USART1_DESC, x);
+    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
+    at91_usart_write (&USART1_DESC, y);
+}
+
+//select the font to be used
+void selectFont(int fontNum)
+{
+    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
+    at91_usart_write (&USART1_DESC, 0x2B);
+    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
+    at91_usart_write (&USART1_DESC, fontNum);
+}
+
+//print a string
+void printString(char* str)
+{
+    u_int   i;
+    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
+    at91_usart_write (&USART1_DESC, 0x2D);
+    for (i=0; str[i] !=0; i++)   
+    {   
+        while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0)  {}   
+        at91_usart_write(&USART1_DESC, str[i]);   
     }
+    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
+    at91_usart_write (&USART1_DESC, 0);
+}
 
-    setMR(getMR()|MR_FS); /* Tell the wiznet to adjust for endianness */
-   
-    setSHAR(mac); // set source mac address
-    setGAR(gw); // set gateway IP address
-    setSUBR(sn); // set subnet mask address
-    setSIPR(ip); // set source IP address
+//draw a line to specified location
+void drawLine(int x, int y)
+{
+    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
+    at91_usart_write (&USART1_DESC, 0x28); //draw line
+    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
+    at91_usart_write (&USART1_DESC, x);
+    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
+    at91_usart_write (&USART1_DESC, y);
+}
 
-    /* set up the NVRAM on the EBI */
-    EBI_CSR3 = 0x00000000;
-    EBI_CSR3 |= EBI_CSEN;
-    EBI_CSR3 |= EBI_BAT_BYTE_WRITE;
-    EBI_CSR3 |= EBI_TDF_1;
-    EBI_CSR3 |= EBI_PAGES_4M;
-    EBI_CSR3 |= EBI_WSE;
-    EBI_CSR3 |= EBI_NWS_5;
-    EBI_CSR3 |= EBI_DBW_8;
-    EBI_CSR3 |= NVR_BASE;
+//turn on the LCD light
+void lightOn()
+{
+    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
+    at91_usart_write (&USART1_DESC, 0x22);
+}
 
-    dns(ntpdnsfixed, NTP_SERVER_DNS_IP_OFFSET, servip);
+//turn off the LCD light
+void lightOff()
+{
+    while((at91_usart_get_status(&USART1_DESC) & US_TXRDY) == 0) {}
+    at91_usart_write (&USART1_DESC, 0x23);
+}
 
-    printf("Returned IP: %d.%d.%d.%d\n", servip[0], servip[1], servip[2], servip[3]);    
+//read a byte from the LCD
+int LCD_read(u_int* value)
+{
+    u_int status;   
+    status = ((at91_usart_get_status(&USART1_DESC) & US_RXRDY) == 0);   
+    if (!status)   
+    {
+	at91_usart_read (&USART1_DESC, value);
+    }
+    return !status;   
+}
 
-    if (servip[0] == 0)
-	memmove(servip, defaultntp, 4);
+//this function initializes the RTC for keeping track of the date and time
+void dateTimeInit()
+{
+    // allocate memory space for the RTC struct
+    myRTC = (TimeDescRtc *)calloc(1, sizeof(TimeDescRtc));
+    // bind the RTC descriptor to the corresponding pointer in the RTC struct
+    myRTC->rtc_desc = &RTC_DESC;
+    // open the RTC
+    at91_time_rtc_open(myRTC);
+    // set to 12 hour mode
+    at91_rtc_set_24(myRTC);
+}
 
-    secs = ntp(servip);
+//this function closes the RTC
+void dateTimeClose()
+{
+    //close the RTC
+    at91_time_rtc_close(myRTC);
+}
 
-    printf("UTC time in seconds: %u\n", secs);
+//this function reads the current date and time
+void dateTimeRead()
+{
+    at91_time_rtc_read(myRTC);
+}
 
-    dns(GOOGLE_DNS_NAME, GOOGLE_DNS_IP_OFFSET, servip);
+void checkRtcValidity()
+{
+    unsigned int rtcValid = at91_time_rtc_validity(myRTC);
+    if(rtcValid & 0x0000000c > 0)
+	printf("ERROR: INVALID TIME/DATE IN RTC\n");
+    return;
+}
 
-    printf("Returned IP: %d.%d.%d.%d\n", servip[0], servip[1], servip[2], servip[3]);
+//this function synchronizes time, date and calendar info with Internet source
+void sync()
+{
+    unsigned int UTCsecs;
+    unsigned int secsSince20090401;
+	
+    //these variables are used to save the date and time values read online
+    int currentYear, currentMonth, currentDate, currentDay, currentHour, currentMinute, currentSecond, currentAMPM;
 
-    if (servip[0] == 0)
-	memmove(servip, defaultgoogle, 4);
+    //clear the screen first
+    clearScreen();
 
-    /* When doing this actually, store the username and password in NVR */
-    strcpy((char *)NVR_USERNAME, GMAIL_USER);
-    strcpy((char *)NVR_PASSWORD, GMAIL_MAGIC_COOKIE);
+    //draw title text
+    selectFont(4);
+    setColor(0x07); //red
+    setLocation(15, 60);
+    printString("SYNCHRONIZING");
+    setLocation(74, 75);
+    printString(".  .  .  .  .  .");
 
-    gdatasize = gcal(servip, bigbuffer);
+    //connect to the Internet and retrieve time and alarm information
+    UTCsecs = netSync();
 
-    if (gdatasize < 0)
-	printf("Got too many bytes from Google!\n");
+    secsSince20090401 = (UTCsecs - SECSUPTO20090401) + 60 * 60 * (*tzShift); // + 60 * 60 * (*tzShift)
+    secsSince20090401 = 353374 - 3600;
+
+    //read time and date values online
+    currentYear = (secsSince20090401/86400) / 365 + 2009;
+    currentMonth = (secsSince20090401/86400) % 365 + 1;
+    if(currentMonth <= 31) currentMonth = 4;
+    else if(currentMonth>31 && currentMonth<=59) currentMonth = 5;
+    else if(currentMonth>59 && currentMonth<=90) currentMonth = 6;
+    else if(currentMonth>90 && currentMonth<=120) currentMonth = 7;
+    else if(currentMonth>120 && currentMonth<=151) currentMonth = 8;
+    else if(currentMonth>151 && currentMonth<=181) currentMonth = 9;
+    else if(currentMonth>181 && currentMonth<=212) currentMonth = 10;
+    else if(currentMonth>212 && currentMonth<=243) currentMonth = 11;
+    else if(currentMonth>243 && currentMonth<=273) currentMonth = 12;
+    else if(currentMonth>273 && currentMonth<=304) currentMonth = 1;
+    else if(currentMonth>304 && currentMonth<=334) currentMonth = 2;
+    else if(currentMonth>334 && currentMonth<=365) currentMonth = 3;
+    currentDate = (secsSince20090401/86400) % 365 + 1;
+    if(currentMonth == 5) currentDate -= 31;
+    else if(currentMonth == 6) currentDate -= 59;
+    else if(currentMonth == 7) currentDate -= 90;
+    else if(currentMonth == 8) currentDate -= 120;
+    else if(currentMonth == 9) currentDate -= 151;
+    else if(currentMonth == 10) currentDate -= 181;
+    else if(currentMonth == 11) currentDate -= 212;
+    else if(currentMonth == 12) currentDate -= 243;
+    else if(currentMonth == 1) currentDate -= 273;
+    else if(currentMonth == 2) currentDate -= 304;
+    else if(currentMonth == 3) currentDate -= 334;
+    currentDay = (secsSince20090401/86400 + 2) % 7 + 1;
+    currentHour = (secsSince20090401/3600) % 24;
+    currentMinute = (secsSince20090401/60) % 60;
+    currentSecond = secsSince20090401 % 60;
+
+    if(!at91_rtc_get_24(myRTC))
+    {
+	if(currentHour == 0)
+	{
+	    currentHour = 12;
+	    currentAMPM = 0; //AM
+	}
+	else if(currentHour >= 1 && currentHour <= 11)
+	{
+	    currentAMPM = 0;
+	}
+	else if(currentHour == 12)
+	{
+	    currentAMPM = 1; //PM
+	}
+	else if(currentHour >= 13 && currentHour <= 23)
+	{
+	    currentHour -= 12;
+	    currentAMPM = 1;
+	}
+    }
     else
     {
-	Alarm *alarm = (Alarm *)NVR_ALARMS;
+	currentAMPM = 0;
+    }
+
+    /*read weather information online
+    todayTempLow = 15;
+    todayTempHigh = 27;
+    todayCondition = 0;
+    tomorrowTempLow = 8;
+    tomorrowTempHigh = 24;
+    tomorrowCondition = 1; */
+
+    //read next alarm information online
+    alarmYear = 2009;
+    alarmMonth = 4; // 1 to 12
+    alarmDate = 4; // 1 to 31
+    alarmHour = 23; // 0 to 12
+    alarmMinute = 36; // 0 to 59
+
+    myRTC->time_int.cent = 20;
+    myRTC->time_int.year = currentYear - 2000;
+    myRTC->time_int.month = currentMonth;
+    myRTC->time_int.date = currentDate;
+    myRTC->time_int.day = currentDay;
+    myRTC->time_int.hour = currentHour;
+    myRTC->time_int.min = currentMinute;
+    myRTC->time_int.sec = currentSecond;
+    myRTC->time_int.ampm = currentAMPM;
+
+    at91_time_rtc_write(myRTC);
+    //printf("Datetime input valid? %d\n", at91_time_rtc_validity(myRTC));
+    checkRtcValidity();
+}
+
+void updateTZ()
+{
+    //these variables are used to save the date and time values
+    int currentYear, currentMonth, currentDate, currentDay, currentHour;
+
+    //clear the screen first
+    clearScreen();
+
+    //draw title text
+    selectFont(4);
+    setColor(0x07); //red
+    setLocation(15, 60);
+    printString("  UPDATING");
+    setLocation(74, 75);
+    printString(".  .  .  .  .  .");
+
+    currentYear = myRTC->time_int.year;
+    currentMonth = myRTC->time_int.month;
+    currentDate = myRTC->time_int.date;
+    currentDay = myRTC->time_int.day;
+    currentHour = myRTC->time_int.hour += *tzShift;
+
+    if(currentHour < 0)
+    {
+	currentHour += 24;
+	currentDay--;
+	currentDate--;
+    }
+    else if(currentHour > 23)
+    {
+	currentHour -= 24;
+	currentDay++;
+	currentDate++;
+    }
+
+    if(currentDate <= 0)
+    {
+	currentMonth--;
+	if(currentMonth == 0) currentDate = 31;
+	else if(currentMonth == 1) currentDate = 31;
+	else if(currentMonth == 2) currentDate = 28;
+	else if(currentMonth == 3) currentDate = 31;
+	else if(currentMonth == 4) currentDate = 30;
+	else if(currentMonth == 5) currentDate = 31;
+	else if(currentMonth == 6) currentDate = 30;
+	else if(currentMonth == 7) currentDate = 31;
+	else if(currentMonth == 8) currentDate = 31;
+	else if(currentMonth == 9) currentDate = 30;
+	else if(currentMonth == 10) currentDate = 31;
+	else if(currentMonth == 11) currentDate = 30;
+    }
+    else if((currentDate > 28 && currentMonth == 2) ||
+	    (currentDate > 30 && (currentMonth == 4 || currentMonth == 6 || currentMonth == 9 || currentMonth == 11)) ||
+	    currentDate > 31)
+    {
+	currentDate = 1;
+	currentMonth++;
+    }
+    
+    if(currentMonth <= 0)
+    {
+	currentMonth += 12;
+	currentYear--;
+    }
+    else if(currentMonth >= 13)
+    {
+	currentMonth -= 12;
+	currentYear++;
+    }
+    currentDay %= 7 + 1;
+    
+    myRTC->time_int.month = currentMonth;
+    myRTC->time_int.date = currentDate;
+    myRTC->time_int.day = currentDay;
+    myRTC->time_int.hour = currentHour;
+    myRTC->time_int.year = currentYear;
+    
+    at91_time_rtc_write(myRTC);
+    //printf("Datetime input valid? %d\n", at91_time_rtc_validity(myRTC));
+}
+
+//this function prints the current time on the LCD screen
+//by erasing only the part of the screen that needs to be updated
+//in order to minimize flickering
+void printTime()
+{
+    //this is used to store the time display string
+    char timeString[17];
+
+    //check if a second has passed
+    //if not then we don't need to update time display, so return
+    if(myRTC->time_int.sec == oldSecond) return;
+
+    //convert 24 hour time into 12 hour AM/PM mode
+    if(myRTC->time_int.hour == 12)
+	sprintf(timeString, "%02d : %02d : %02d PM", myRTC->time_int.hour, myRTC->time_int.min, myRTC->time_int.sec);
+    else if(myRTC->time_int.hour > 12)
+	sprintf(timeString, "%02d : %02d : %02d PM", myRTC->time_int.hour - 12, myRTC->time_int.min, myRTC->time_int.sec);
+    else if (myRTC->time_int.hour == 0)
+	sprintf(timeString, "%02d : %02d : %02d AM", myRTC->time_int.hour + 12, myRTC->time_int.min, myRTC->time_int.sec);
+    else
+	sprintf(timeString, "%02d : %02d : %02d AM", myRTC->time_int.hour, myRTC->time_int.min, myRTC->time_int.sec);
+    
+    setColor(0xFF);
+    setLocation(50, 60);
+    fillBox(190, 35);
+    selectFont(4);
+    setColor(0x38); //green
+    setLocation(40, 70);
+    printString(timeString);
+    oldSecond = myRTC->time_int.sec; //save the current second
+}
+
+//this function prints the current date on the LCD screen
+void printDate()
+{
+    //these are used to store the date and month strings
+    char month[4];
+    
+    //this is used to store the date display string
+    char dateString[23];
+
+    //check if a day has passed
+    //if not then we don't need to update date display, so return
+    if(myRTC->time_int.date == oldDate) return;
+
+    //build the text string for the month
+    switch(myRTC->time_int.month)
+    {
+	case(1):
+	    sprintf(month, "Jan");
+	    break;
+	case(2):
+	    sprintf(month, "Feb");
+	    break;
+	case(3):
+	    sprintf(month, "Mar");
+	    break;
+	case(4):
+	    sprintf(month, "Apr");
+	    break;
+	case(5):
+	    sprintf(month, "May");
+	    break;
+	case(6):
+	    sprintf(month, "Jun");
+	    break;
+	case(7):
+	    sprintf(month, "Jul");
+	    break;
+	case(8):
+	    sprintf(month, "Aug");
+	    break;
+	case(9):
+	    sprintf(month, "Sep");
+	    break;
+	case(10):
+	    sprintf(month, "Oct");
+	    break;
+	case(11):
+	    sprintf(month, "Nov");
+	    break;
+	case(12):
+	    sprintf(month, "Dec");
+	    break;
+	default:
+	    break;
+    }
+
+    //build the text string for the entire date display line
+    switch(myRTC->time_int.day)
+    {
+	case(1):
+	    sprintf(dateString, "Monday, %s %d, %d", month, myRTC->time_int.date, 2000 + myRTC->time_int.year);
+	    break;
+	case(2):
+	    sprintf(dateString, "Tuesday, %s %d, %d", month, myRTC->time_int.date, 2000 + myRTC->time_int.year);
+	    break;
+	case(3):
+	    sprintf(dateString, "Wednesday, %s %d, %d", month, myRTC->time_int.date, 2000 + myRTC->time_int.year);
+	    break;
+	case(4):
+	    sprintf(dateString, "Thursday, %s %d, %d", month, myRTC->time_int.date, 2000 + myRTC->time_int.year);
+	    break;
+	case(5):
+	    sprintf(dateString, "Friday, %s %d, %d", month, myRTC->time_int.date, 2000 + myRTC->time_int.year);
+	    break;
+	case(6):
+	    sprintf(dateString, "Saturday, %s %d, %d", month, myRTC->time_int.date, 2000 + myRTC->time_int.year);
+	    break;
+	case(7):
+	    sprintf(dateString, "Sunday, %s %d, %d", month, myRTC->time_int.date, 2000 + myRTC->time_int.year);
+	    break;
+        default:
+	    break;
+    }
+
+    setColor(0xFF);
+    setLocation(50,45);
+    fillBox(190, 14);
+    selectFont(2);
+    setColor(0xC0); //blue
+    setLocation(50, 45);
+    printString(dateString);
+    oldDate = myRTC->time_int.date; //save the current date
+}
+
+//this function prints today's high and low temperatures on the LCD screen
+void printNextAlarm()
+{
+    int alarmHourDisplay;
+    int alarmAMPMDisplay;
+    
+    //these are used to store the month and next alarm strings
+    char month[4];
+    char nextAlarmString[34];
+    
+    setColor(0xC0); //blue
+    selectFont(2);
+    setLocation(50, 105);
+    //build the text string for the month
+    switch(alarmMonth)
+    {
+	case(1):
+	    sprintf(month, "Jan");
+	    break;
+	case(2):
+	    sprintf(month, "Feb");
+	    break;
+	case(3):
+	    sprintf(month, "Mar");
+	    break;
+	case(4):
+	    sprintf(month, "Apr");
+	    break;
+	case(5):
+	    sprintf(month, "May");
+	    break;
+	case(6):
+	    sprintf(month, "Jun");
+	    break;
+	case(7):
+	    sprintf(month, "Jul");
+	    break;
+	case(8):
+	    sprintf(month, "Aug");
+	    break;
+	case(9):
+	    sprintf(month, "Sep");
+	    break;
+	case(10):
+	    sprintf(month, "Oct");
+	    break;
+	case(11):
+	    sprintf(month, "Nov");
+	    break;
+	case(12):
+	    sprintf(month, "Dec");
+	    break;
+	default:
+	    break;
+    }
+
+    if(alarmHour == 0)
+    {
+	alarmHourDisplay = 12;
+	alarmAMPMDisplay = 0; //AM
+    }
+    else if(alarmHour >= 1 && alarmHour <= 11)
+    {
+	alarmHourDisplay = alarmHour;
+	alarmAMPMDisplay = 0;
+    }
+    else if(alarmHour == 12)
+    {
+	alarmHourDisplay = 12;
+	alarmAMPMDisplay = 1; //PM
+    }
+    else if(alarmHour >= 13 && alarmHour <= 23)
+    {
+	alarmHourDisplay = alarmHour - 12;
+	alarmAMPMDisplay = 1;
+    }
+
+    if(alarmAMPMDisplay == 0)
+	sprintf(nextAlarmString, "Next Alarm: %d:%dAM, %s %d", alarmHourDisplay, alarmMinute, month, alarmDate);
+    else sprintf(nextAlarmString, "Next Alarm: %d:%dPM, %s %d", alarmHourDisplay, alarmMinute, month, alarmDate);
+    printString(nextAlarmString);
+}
+
+//this function prints a title text on the top part of the screen
+void printTitle(int sel)
+{
+    setLocation(30, 5);
+    setColor(0xFF); //white
+    fillBox(200, 40);
+    selectFont(4);
+    setColor(0x07); //red
+    setLocation(35, 10);
 	
-	printf("Got %d bytes from Google\n", gdatasize);
-    
-	sptr = strstr(bigbuffer, ALARM_ACTIVE_STRING);
-    
-	while (sptr != NULL)
-	{
-	    char *monthptr, *sptr2;
-
-	    memset(alarm, 0, sizeof(Alarm));
-	    
-	    sptr = strstr(sptr, "When: ");
-
-	    monthptr = sptr + 10;
-
-	    if (strncmp(monthptr, "Jan", 3) == 0)
-		alarm->month = 1;
-	    else if (strncmp(monthptr, "Feb", 3) == 0)
-		alarm->month = 2;
-	    else if (strncmp(monthptr, "Mar", 3) == 0)
-		alarm->month = 3;
-	    else if (strncmp(monthptr, "Apr", 3) == 0)
-		alarm->month = 4;
-	    else if (strncmp(monthptr, "May", 3) == 0)
-		alarm->month = 5;
-	    else if (strncmp(monthptr, "Jun", 3) == 0)
-		alarm->month = 6;
-	    else if (strncmp(monthptr, "Jul", 3) == 0)
-		alarm->month = 7;
-	    else if (strncmp(monthptr, "Aug", 3) == 0)
-		alarm->month = 8;
-	    else if (strncmp(monthptr, "Sep", 3) == 0)
-		alarm->month = 9;
-	    else if (strncmp(monthptr, "Oct", 3) == 0)
-		alarm->month = 10;
-	    else if (strncmp(monthptr, "Nov", 3) == 0)
-		alarm->month = 11;
-	    else if (strncmp(monthptr, "Dec", 3) == 0)
-		alarm->month = 12;
-	    
-	    alarm->day = atoi(sptr + 14);
-
-	    sptr = strchr(sptr, ',');
-
-	    alarm->year = atoi(sptr + 2);
-	    alarm->starthour = atoi(sptr + 7);
-
-	    sptr2 = strchr(sptr, ':');
-	    if (sptr2 != NULL && (sptr2 < strstr(sptr, "to")))
-		alarm->startminute = atoi(sptr2 + 1);
-
-	    sptr = strstr(sptr, "to");
-
-	    alarm->endhour = atoi(sptr + 3);
-
-	    sptr2 = strchr(sptr, ':');
-	    if (sptr2 != NULL)
-		alarm->endminute = atoi(sptr2 + 1);
-
-	    if (strncmp(sptr - 3, "pm", 2) == 0)
-		alarm->starthour += 12;
-
-	    sptr = strstr(sptr, "&amp;nbsp;");
-
-	    if (strncmp(sptr - 2, "pm", 2) == 0)
-		alarm->endhour += 12;
-
-	    if (alarm->starthour % 12 == 0)
-		alarm->starthour -= 12;
-	    if (alarm->endhour % 12 == 0)
-		alarm->endhour -= 12;
-
-	    sptr = strstr(sptr, ALARM_ACTIVE_STRING);
-
-	    printf("Month: %d\n", alarm->month);
-	    printf("Day: %d\n", alarm->day);
-	    printf("Year: %d\n", alarm->year);
-	    printf("Starth: %d\n", alarm->starthour);
-	    printf("Startm: %d\n", alarm->startminute);
-	    printf("Endh: %d\n", alarm->endhour);
-	    printf("Endm: %d\n", alarm->endminute);
-
-	    ++alarm;
-	    ++numberOfAlarms;
-	}
+    if(sel == 0)
+    {
+	printString("T I C K - T O C K");
     }
-
-    return 0;
+    else if(sel == 1)
+    {
+	printString("W A K E   U P ! !");
+    }
 }
 
-void dns(char *dnsname, int ipoffset, uint8 *servip)
+//this function draws the bottom nav bar
+void drawNavBar()
 {
-    uint8 i = 0, dnsbuffer[MAX_DNS_LENGTH];
-    uint16 *dnsbuffer16 = (uint16 *)dnsbuffer;
-    uint32 len;
-    int received = 0;
-    
-    close(0);
-    socket(0, Sn_MR_UDP, DNS_CLIENT_PORT, 0);
+    //draw bottom nav bar
+    setColor(0xC0); //blue
+    setLocation(0, 130);
+    drawBox(240, 30);
+    setLocation(60, 130);
+    drawLine(60, 159);
+    setLocation(180, 130);
+    drawLine(180, 159);
 
-    memset(dnsbuffer, 0, MAX_DNS_LENGTH);
-
-    dnsbuffer16[i++] = SWAP16(DNS_HEADER_ID);
-    dnsbuffer16[i++] = SWAP16(DNS_HEADER_QR + DNS_HEADER_OPCODE + DNS_HEADER_AA + DNS_HEADER_TC + DNS_HEADER_RD + DNS_HEADER_RA + DNS_HEADER_Z + DNS_HEADER_RCODE);
-    dnsbuffer16[i++] = SWAP16(DNS_HEADER_QDCOUNT);
-    dnsbuffer16[i++] = SWAP16(DNS_HEADER_ANCOUNT);
-    dnsbuffer16[i++] = SWAP16(DNS_HEADER_NSCOUNT);
-    dnsbuffer16[i++] = SWAP16(DNS_HEADER_ARCOUNT);
-
-    strcpy((char *)(&(dnsbuffer[i <<= 1])), dnsname);
-    i += strlen(dnsname) + 1;
-
-    dnsbuffer[i++] = FIRSTBYTE(DNS_QUERY_QTYPE);
-    dnsbuffer[i++] = SECONDBYTE(DNS_QUERY_QTYPE);
-
-    dnsbuffer[i++] = FIRSTBYTE(DNS_QUERY_QCLASS);
-    dnsbuffer[i++] = SECONDBYTE(DNS_QUERY_QCLASS);
-
-    sendto(0, dnsbuffer, i, gw, DNS_PORT);
-
-    while (!received)
-    {
-	if ((len = getSn_RX_RSR(0)) > 0)
-	{
-	    uint8 destip[4];
-	    uint16 destport;
-
-	    len = recvfrom(0, dnsbuffer, len, destip, &destport);
-	    received = 1;
-	}
-    }
-
-    close(0);
-
-    memmove(servip, dnsbuffer + ipoffset, 4);
+    //button text
+    setLocation(8, 138);
+    printString("Light On");
+    setLocation(68, 138);
+    printString("          Options");
+    setLocation(198, 138);
+    printString("Sync");
 }
 
-int gcal(uint8 *servip, char *bigbuffer)
+//check if the current date and time matches the alarm date and time
+//also check if the weight sensor signal is asserted
+//if the weight sensor signal is asserted anytime within 15 minutes after the alarm
+//set off the alarm
+void checkAlarm()
 {
-    uint32 len;
-    int i = 0, count = 0;
-    char databuffer[MAX_HTTP_LENGTH];
-    
-    memset(databuffer, 0, MAX_HTTP_LENGTH);
-
-    close(1);
-    socket(1, Sn_MR_TCP, HTTP_CLIENT_PORT, 0);
-    connect(1, servip, HTTP_PORT);
-	    
-    if (getSn_IR(1) & Sn_IR_CON)
-	setSn_IR(1, Sn_IR_CON);
-
-    memset(databuffer, 0, MAX_HTTP_LENGTH);
-
-    strcpy(databuffer, HTTP_HEADER_PRE_USER);
-    i += strlen(HTTP_HEADER_PRE_USER);
-
-    strcpy(databuffer + i, (char *)NVR_USERNAME);
-    i += strlen((char *)NVR_USERNAME);
-
-    strcpy(databuffer + i, HTTP_HEADER_POST_USER);
-    i += strlen(HTTP_HEADER_POST_USER);
-
-    strcpy(databuffer + i, (char *)NVR_PASSWORD);
-    i += strlen((char *)NVR_PASSWORD);
-
-    strcpy(databuffer + i, HTTP_HEADER_POST_COOKIE);
-    i += strlen(HTTP_HEADER_POST_COOKIE);
-
-    wait_10ms(10);
-
-    send(1, (uint8 *)databuffer, i);
-
-    i = 0;
-    while (count < 10 && i >= 0)
+    if(!at91_rtc_get_24(myRTC))
     {
-	if ((len = getSn_RX_RSR(1)) > 0)
+	//RTC in 12 hour mode
+    }
+    else
+    {
+	//RTC in 24 hour mode, do nothing
+	alarmAMPM = 0;
+    }
+    /*
+    printf("currentYear = %d\n", myRTC->time_int.year);
+    printf("alarmYear = %d\n", (alarmYear-2000));
+    printf("currentMonth = %d\n", myRTC->time_int.month);
+    printf("alarmMonth = %d\n", alarmMonth);
+    printf("currentDate = %d\n", myRTC->time_int.date);
+    printf("alarmDate = %d\n", alarmDate);
+    printf("currentHour = %d\n", myRTC->time_int.hour);
+    printf("alarmHour = %d\n", alarmHour);
+    printf("currentMin = %d\n", myRTC->time_int.min);
+    printf("alarmMinute = %d\n", alarmMinute);
+    printf("currentAMPM = %d\n", myRTC->time_int.ampm);
+    printf("alarmAMPM = %d\n", alarmAMPM);
+    */
+    
+    if (!alarmActive(400, 2000)) return;
+    if(soundAlarm == 1) {
+	if(myRTC->time_int.min > alarmMinute + 0)
 	{
-	    len = recv(1, (uint8 *)databuffer, len);
+	    beepOff();
+	    soundAlarm = 0;
+	    printTitle(0);
+	    return;
+	}
+	else if(myRTC->time_int.min < alarmMinute && ((60 - alarmMinute) + myRTC->time_int.min) > 0)
+	{
+	    beepOff();
+	    soundAlarm = 0;
+	    printTitle(0);
+	    return;
+	}
+	return;
+    }
+    if(myRTC->time_int.year==(alarmYear-2000) && myRTC->time_int.month==alarmMonth && myRTC->time_int.date==alarmDate && myRTC->time_int.hour==alarmHour && myRTC->time_int.min==alarmMinute && myRTC->time_int.ampm==alarmAMPM)
+    {
+	beepOn();
+	soundAlarm = 1; //this sounds the alarm
+	printTitle(1);
+    }
+}
 
-	    if (i + len > NVR_BUFFER_SIZE)
-		i = -1;
-	    else
+//this displays the main screen
+void mainScreen()
+{
+    //reset saved date and time variables so date and time can be updated
+    oldDate = 0;
+    oldSecond = 61;
+    
+    //clear the screen first
+    clearScreen();
+    
+    //print the tick-tock text
+    printTitle(0);
+
+    //print the current time
+    printTime();
+    
+    //print the current date
+    printDate();
+    
+    //print next alarm string
+    printNextAlarm();
+
+    //draw the bottom nav bar
+    drawNavBar();
+}
+
+//display the options screen and allow the user the change program options
+void showOptions()
+{
+    clearScreen();
+
+    //draw title text
+    selectFont(4);
+    setColor(0x38); //green
+    setLocation(35, 1);
+    printString("   O P T I O N S");
+    
+    //draw bottom nav bar
+    selectFont(2);
+    setColor(0xC0); //blue
+    setLocation(60, 27);
+    drawBox(120, 107);
+    setLocation(60, 54);
+    drawLine(179, 54);
+    setLocation(60, 80);
+    drawLine(179, 80);
+    setLocation(60, 107);
+    drawLine(179, 107);
+
+    //button text
+    setLocation(68, 33);
+    printString("Google User Name");
+    setLocation(68, 60);
+    printString("Magic Cookie");
+    setLocation(68, 86);
+    printString("Enter Time Zone");
+    setLocation(68, 113);
+    printString("Back to Clock");
+}
+
+//display the weather screen and show today and tomorrow's weather
+void showWeather()
+{
+    clearScreen();
+
+    //draw title text
+    selectFont(4);
+    setColor(0x38); //green
+    setLocation(46, 1);
+    printString("W E A T H E R");
+    
+    //draw bottom nav bar
+    selectFont(2);
+    setColor(0xC0); //blue
+    setLocation(0, 133);
+    drawBox(240, 27);
+    
+    //button text
+    setLocation(85, 139);
+    printString("Back to Clock");
+}
+
+//print a new username or password char
+void credPrint(char* credChar)
+{
+    setColor(0xFF); //white
+    setLocation((38 + credPosition*10), 34);
+    fillBox(10, 12);
+    setLocation((38 + credPosition*10), 34);
+    setColor(0x38); //green
+    printString(credChar);
+    credAdd = credChar;
+    cursorFull = 1;
+	
+    //printf("credString is: %s\n", credString);
+}
+
+//store the current char to the credString and move the cred cursor
+void credNext()
+{
+    if(cursorFull == 0 || credPosition >= 16) return;
+    
+    //remove old cursor
+    setColor(0xFF);
+    setLocation((38 + credPosition*10), 46);
+    drawLine((38 + credPosition*10) + 8, 46);
+
+    //save newly typed char to the credString
+    sprintf(credString, "%s%s", credString, credAdd);
+    credPosition++;
+    
+    //draw cursor
+    setColor(0xC0); //blue
+    setLocation((38 + credPosition*10), 46);
+    drawLine((38 + credPosition*10) + 8, 46);
+
+    cursorFull = 0;
+    //printf("credString is: %s\n", credString);
+
+    credAdd = NULL;
+}
+
+//remove a username or password char
+void credRemove()
+{
+    //used to store a copy of the credString
+    char credStringCopy[20];
+
+    int count; //counter
+    
+    //used to store the length of the credString
+    int credLength;
+
+    //clear the currently stored credChar
+    credAdd = NULL;
+
+    //if a char is above the cursor, only erase it from screen because
+    //it has not yet been saved to credString
+    if(cursorFull == 1)
+    {
+	setColor(0xFF); //white
+	setLocation((38 + (credPosition)*10), 34);
+	fillBox(10, 12);
+	cursorFull = 0;
+	return;
+    }
+
+    //otherwise remove the char from screen, move cursor backward and update credString
+    if(credPosition > 0)
+    {
+	//remove old cursor and char
+	setColor(0xFF); //white
+	setLocation((38 + (credPosition)*10), 34);
+	fillBox(10, 15);
+	credPosition--;
+
+	setColor(0xFF); //white
+	setLocation((38 + (credPosition)*10), 34);
+	fillBox(10, 15);
+
+	//draw cursor
+	setColor(0xC0);
+	setLocation((38 + (credPosition)*10), 46);
+	drawLine((38 + (credPosition)*10) + 8, 46);
+
+	//remove the last char from credString
+	credLength = strlen(credString);
+	//printf("credLength is: %d\n", credLength);
+	strcpy(credStringCopy, credString);
+	//printf("credStringCopy is: %s\n", credStringCopy);
+	memset(credString, 0, 20*sizeof(char));
+	for(count=0; count<credLength-1; count++)
+	{
+	    sprintf(credString, "%s%c", credString, credStringCopy[count]);
+	}
+    }
+    //printf("credString is: %s\n", credString);
+}
+
+//this function draws the cell phone style keyboard
+void keyboardDraw(int keyMode)
+{
+    //draw keyboard frame
+    setColor(0xFF);
+    setLocation(30,53);
+    fillBox(180,107); //clear this area
+    setColor(0xC0);
+    setLocation(30, 53);
+    drawBox(180, 107);
+    setLocation(30, 80);
+    drawLine(209, 80);
+    setLocation(30, 107);
+    drawLine(209, 107);
+    setLocation(30, 133);
+    drawLine(209, 133);
+    setLocation(90, 53);
+    drawLine(90, 159);
+    setLocation(150, 53);
+    drawLine(150, 159);
+
+    //draw keyboard text according to keyMode
+    if(keyMode == 0)
+    {
+	setLocation(38,60);
+	printString("Number");
+	setLocation(98, 60);
+	printString("abc");
+	setLocation(158, 60);
+	printString("def");
+	setLocation(38, 87);
+	printString("ghi");
+	setLocation(98, 87);
+	printString("jkl");
+	setLocation(158, 87);
+	printString("mno");
+	setLocation(38, 114);
+	printString("pqrs");
+	setLocation(98, 114);
+	printString("tuv");
+	setLocation(158, 114);
+	printString("wxyz");
+	setLocation(38, 140);
+	printString("Caps");
+	setLocation(98, 140);
+	printString("Next");
+	setLocation(158, 140);
+	printString("Back");
+    }
+    else if(keyMode == 1)
+    {
+	setLocation(38,60);
+	printString("Number");
+	setLocation(98, 60);
+	printString("ABC");
+	setLocation(158, 60);
+	printString("DEF");
+	setLocation(38, 87);
+	printString("GHI");
+	setLocation(98, 87);
+	printString("JKL");
+	setLocation(158, 87);
+	printString("MNO");
+	setLocation(38, 114);
+	printString("PQRS");
+	setLocation(98, 114);
+	printString("TUV");
+	setLocation(158, 114);
+	printString("WXYZ");
+	setLocation(38, 140);
+	printString("Caps");
+	setLocation(98, 140);
+	printString("Next");
+	setLocation(158, 140);
+	printString("Back");
+    }
+    else if(keyMode == 2)
+    {
+	setLocation(38,60);
+	printString("1");
+	setLocation(98, 60);
+	printString("2");
+	setLocation(158, 60);
+	printString("3");
+	setLocation(38, 87);
+	printString("4");
+	setLocation(98, 87);
+	printString("5");
+	setLocation(158, 87);
+	printString("6");
+	setLocation(38, 114);
+	printString("7");
+	setLocation(98, 114);
+	printString("8");
+	setLocation(158, 114);
+	printString("9");
+	setLocation(38, 140);
+	printString("Letter");
+	setLocation(98, 140);
+	printString("0");
+	setLocation(158, 140);
+	printString("Back");
+    }
+    else if(keyMode == 3)
+    {
+	setLocation(38,60);
+	printString("1");
+	setLocation(98, 60);
+	printString("2");
+	setLocation(158, 60);
+	printString("3");
+	setLocation(38, 87);
+	printString("4");
+	setLocation(98, 87);
+	printString("5");
+	setLocation(158, 87);
+	printString("6");
+	setLocation(38, 114);
+	printString("7");
+	setLocation(98, 114);
+	printString("8");
+	setLocation(158, 114);
+	printString("9");
+	setLocation(38, 140);
+	printString("-");
+	setLocation(98, 140);
+	printString("0");
+	setLocation(158, 140);
+	printString("Back");
+    }
+    else if(keyMode == 4)
+    {
+	setLocation(38,60);
+	printString("1");
+	setLocation(98, 60);
+	printString("2");
+	setLocation(158, 60);
+	printString("3");
+	setLocation(38, 87);
+	printString("4");
+	setLocation(98, 87);
+	printString("5");
+	setLocation(158, 87);
+	printString("6");
+	setLocation(38, 114);
+	printString("7");
+	setLocation(98, 114);
+	printString("8");
+	setLocation(158, 114);
+	printString("9");
+	setLocation(38, 140);
+	printString("+");
+	setLocation(98, 140);
+	printString("0");
+	setLocation(158, 140);
+	printString("Back");
+    }
+}
+
+//this function is used to print a debugging string
+void dprint(char* debug_string)
+{
+    setColor(0xFF);
+    setLocation(0, 0);
+    fillBox(240,10);
+    setColor(0xC0);
+    setLocation(0, 0);
+    selectFont(1);
+    printString(debug_string);
+}
+
+//display the username entry screen and get username input from the user
+void credEntry(int credMode)
+{
+    //this variable is used to determine whether the cursor should move forward on a key press
+    //the cursor should move forward when a different button from the previous one is pressed
+    int oldID;
+    
+    //this is a string used for debugging
+    char debug_string[40];
+    
+    //this flag is used to indicate whether we are typing in
+    //upper case letters, lower case letters, or numbers
+    //0=lower case 1=upper case 2=numbers
+    int keyMode = 0;
+    int id = 0;
+    //int i = 0;
+
+    //this variable stores data received from the LCD
+    u_int* dataReceived;
+
+    //this flag is used to indicate whether the cursor has a char above it
+    cursorFull = 0;
+
+    //clear the credString
+    memset(credString, 0, 20*sizeof(char));
+
+    //reset input text position
+    credPosition = 0;
+
+    clearScreen();
+
+    //draw title text
+    selectFont(2);
+    setColor(0xC0); //blue
+    setLocation(5, 7);
+    if(credMode == 0) printString("Enter your Google user name:");
+    else if(credMode == 1) printString("Enter your Magic Cookie:");
+
+    //draw enter button
+    setLocation(180, 0);
+    drawBox(60, 27);
+    setLocation(191, 6);
+    printString("Submit");
+
+    //draw text field
+    setLocation(30, 30);
+    drawBox(180, 21);
+
+    //draw cursor
+    setLocation(38, 46);
+    drawLine(46, 46);
+
+    keyboardDraw(keyMode);
+    
+/*    if (credMode == 0)
+ -     {
+ - 	for (i = 0; i < strlen(usernameString); ++i)
+ - 	{
+ - 	    char tmp[2];
+ - 	    tmp[0] = usernameString[i];
+ - 	    tmp[1] = 0;
+ - 	    printf("strlen: %d\n", i);
+ - 	    
+ - 	    credPrint(tmp);
+ - 	    credNext();
+ - 	}
+ -     }
+ -     else if (credMode == 1)
+ -     {
+ - 	for (i = 0; i < strlen(passwordString); ++i)
+ - 	{
+ - 	    char tmp[2];
+ - 	    tmp[0] = passwordString[i];
+ - 	    tmp[1] = 0;
+ - 	    
+ - 	    credPrint(tmp);
+ - 	    credNext();
+ - 	}
+ -     }*/
+
+    while(1)
+    {
+	if(LCD_read(dataReceived))
+	{
+	    oldID = id;
+
+	    //////////////////////////////DEBUG/////////////////////////////////
+	    sprintf(debug_string, "dataReceived is: %d\n", *dataReceived);
+	    dprint(debug_string);
+	    ////////////////////////////////////////////////////////////////////
+	    
+	    //when a button is pressed, process the command accordingly
+	    if(*dataReceived == NUM33 || *dataReceived == NUM34) //row 1 column 1
 	    {
-		memmove(bigbuffer + i, databuffer, len);
-		i += len;
+		id = 1;
+
+		if (oldID > 0 && id != oldID)
+		    credNext();
+		
+		if(keyMode == 0 || keyMode == 1)
+		{
+		    keyMode = 2;
+		    keyboardDraw(keyMode);
+		    id = 0; credNext();
+		}
+		else if(keyMode == 2)
+		{
+		    credPrint("1");
+		}
+	    }
+	    else if(*dataReceived == NUM35 || *dataReceived == NUM36) //row 1 column 2
+	    {
+		id = 2;
+
+		if (oldID > 0 && id != oldID)
+		    credNext();
+		
+		if(keyMode == 0) //text mode
+		{
+		    if(strcmp(credAdd, "a") == 0) credPrint("b");
+		    else if(strcmp(credAdd, "b") == 0) credPrint("c");
+		    else credPrint("a");
+		}
+		else if(keyMode == 1)
+		{
+		    if(strcmp(credAdd, "A") == 0) credPrint("B");
+		    else if(strcmp(credAdd, "B") == 0) credPrint("C");
+		    else credPrint("A");
+		}
+		else if(keyMode == 2)
+		{
+		    credPrint("2");
+		}
+	    }
+	    else if(*dataReceived == NUM37 || *dataReceived == NUM38) //row 1 column 3
+	    {
+		id = 3;
+
+		if (oldID > 0 && id != oldID)
+		    credNext();
+		
+		if(keyMode == 0) //text mode
+		{
+		    if(strcmp(credAdd, "d") == 0) credPrint("e");
+		    else if(strcmp(credAdd, "e") == 0) credPrint("f");
+		    else credPrint("d");
+		}
+		else if(keyMode == 1)
+		{
+		    if(strcmp(credAdd, "D") == 0) credPrint("E");
+		    else if(strcmp(credAdd, "E") == 0) credPrint("F");
+		    else credPrint("D");
+		}
+		else if(keyMode == 2)
+		{
+		    credPrint("3");
+		}
+	    }
+	    else if(*dataReceived == NUM49 || *dataReceived == NUM50) //row 2 column 1
+	    {
+		id = 4;
+
+		if (oldID > 0 && id != oldID)
+		    credNext();
+		
+		if(keyMode == 0) //text mode
+		{
+		    if(strcmp(credAdd, "g") == 0) credPrint("h");
+		    else if(strcmp(credAdd, "h") == 0) credPrint("i");
+		    else credPrint("g");
+		}
+		else if(keyMode == 1)
+		{
+		    if(strcmp(credAdd, "G") == 0) credPrint("H");
+		    else if(strcmp(credAdd, "G") == 0) credPrint("I");
+		    else credPrint("G");
+		}
+		else if(keyMode == 2)
+		{
+		    credPrint("4");
+		}
+	    }
+	    else if(*dataReceived == NUM51 || *dataReceived == NUM52) //row 2 column 2
+	    {
+		id = 5;
+
+		if (oldID > 0 && id != oldID)
+		    credNext();
+		
+		if(keyMode == 0) //text mode
+		{
+		    if(strcmp(credAdd, "j") == 0) credPrint("k");
+		    else if(strcmp(credAdd, "k") == 0) credPrint("l");
+		    else credPrint("j");
+		}
+		else if(keyMode == 1)
+		{
+		    if(strcmp(credAdd, "J") == 0) credPrint("K");
+		    else if(strcmp(credAdd, "K") == 0) credPrint("L");
+		    else credPrint("J");
+		}
+		else if(keyMode == 2)
+		{
+		    credPrint("5");
+		}
+	    }
+	    else if(*dataReceived == NUM53 || *dataReceived == NUM54) //row 2 column 3
+	    {
+		id = 6;
+
+		if (oldID > 0 && id != oldID)
+		    credNext();
+		
+		if(keyMode == 0) //text mode
+		{
+		    if(strcmp(credAdd, "m") == 0) credPrint("n");
+		    else if(strcmp(credAdd, "n") == 0) credPrint("o");
+		    else credPrint("m");
+		}
+		else if(keyMode == 1)
+		{
+		    if(strcmp(credAdd, "M") == 0) credPrint("N");
+		    else if(strcmp(credAdd, "N") == 0) credPrint("O");
+		    else credPrint("M");
+		}
+		else if(keyMode == 2)
+		{
+		    credPrint("6");
+		}
+	    }
+	    else if(*dataReceived == NUM65 || *dataReceived == NUM66) //row 3 column 1
+	    {
+		id = 7;
+
+		if (oldID > 0 && id != oldID)
+		    credNext();
+		
+		if(keyMode == 0) //text mode
+		{
+		    if(strcmp(credAdd, "p") == 0) credPrint("q");
+		    else if(strcmp(credAdd, "q") == 0) credPrint("r");
+		    else if(strcmp(credAdd, "r") == 0) credPrint("s");
+		    else credPrint("p");
+		}
+		else if(keyMode == 1)
+		{
+		    if(strcmp(credAdd, "P") == 0) credPrint("Q");
+		    else if(strcmp(credAdd, "Q") == 0) credPrint("R");
+		    else if(strcmp(credAdd, "R") == 0) credPrint("S");
+		    else credPrint("P");
+		}
+		else if(keyMode == 2)
+		{
+		    credPrint("7");
+		}
+	    }
+	    else if(*dataReceived == NUM67 || *dataReceived == NUM68) //row 3 column 2
+	    {
+		id = 8;
+
+		if (oldID > 0 && id != oldID)
+		    credNext();
+		
+		if(keyMode == 0) //text mode
+		{
+		    if(strcmp(credAdd, "t") == 0) credPrint("u");
+		    else if(strcmp(credAdd, "u") == 0) credPrint("v");
+		    else credPrint("t");
+		}
+		else if(keyMode == 1)
+		{
+		    if(strcmp(credAdd, "T") == 0) credPrint("U");
+		    else if(strcmp(credAdd, "U") == 0) credPrint("V");
+		    else credPrint("T");
+		}
+		else if(keyMode == 2)
+		{
+		    credPrint("8");
+		}
+	    }
+	    else if(*dataReceived == NUM69 || *dataReceived == NUM70) //row 3 column 3
+	    {
+		id = 9;
+
+		if (oldID > 0 && id != oldID)
+		    credNext();
+		
+		if(keyMode == 0) //text mode
+		{
+		    if(strcmp(credAdd, "w") == 0) credPrint("x");
+		    else if(strcmp(credAdd, "x") == 0) credPrint("y");
+		    else if(strcmp(credAdd, "y") == 0) credPrint("z");
+		    else credPrint("w");
+		}
+		else if(keyMode == 1)
+		{
+		    if(strcmp(credAdd, "W") == 0) credPrint("X");
+		    else if(strcmp(credAdd, "X") == 0) credPrint("Y");
+		    else if(strcmp(credAdd, "Y") == 0) credPrint("Z");
+		    else credPrint("W");
+		}
+		else if(keyMode == 2)
+		{
+		    credPrint("9");
+		}
+	    }
+	    else if(*dataReceived == NUM81 || *dataReceived == NUM82) //row 4 column 1
+	    {
+		//printf("Resetting LCD usart connection...\n");
+		LCD_close();
+		LCD_init();
+		//printf("LCD usart connection reset\n");
+		if(keyMode == 0) keyMode = 1;
+		else if(keyMode == 1) keyMode = 0;
+		else if(keyMode == 2) keyMode = 0;
+		keyboardDraw(keyMode);
+		id = 0; credNext();
+	    }
+	    else if(*dataReceived == NUM83 || *dataReceived == NUM84) //row 4 column 2
+	    {
+		if (keyMode == 0 || keyMode == 1)
+		    credNext();
+		else if (keyMode == 2)
+		{
+		    id = 10;
+		    
+		    if (oldID > 0 && id != oldID)
+			credNext();
+		    
+		    credPrint("0");
+		}
+	    }
+	    else if(*dataReceived == NUM85 || *dataReceived == NUM86) //row 4 column 3
+	    {
+		credRemove();
+	    }
+	    else if(*dataReceived <= NUM7) //submit button
+	    {
+		if(cursorFull == 1) sprintf(credString, "%s%s", credString, credAdd);
+				    
+		if(credMode == 0)
+		{
+		    memset(usernameString, 0, 20*sizeof(char));
+		    sprintf(usernameString, "%s", credString);
+		}
+		else if(credMode == 1)
+		{
+		    memset(passwordString, 0, 20*sizeof(char));
+		    strcpy(passwordString, credString);
+		}
+#ifdef DEBUG_MODE		
+		printf("The Google user name string is:\n");
+		printf("%s\n", usernameString);
+#endif		
+		showOptions(); //go to the options screen if the options button is pressed
+		return;
 	    }
 	}
-	else
-	    ++count;
-
-	wait_10ms(10);
     }
-
-    bigbuffer[i] = 0;
-    ++i;
-    
-    disconnect(1);
-    close(1);
-
-    return i;
 }
 
-unsigned int ntp(uint8 *servip)
+//display the time zone entry screen and get time zone input from the user
+void timezoneEntry()
 {
-    uint8 ntpbuffer[MAX_NTP_LENGTH];
-    uint32 len;
-    unsigned int *secsptr = NULL;
-    int received = 0;
-
-    close(0);
-    socket(0, Sn_MR_UDP, NTP_CLIENT_PORT, 0);
+    int tzKeyMode = *tzShift < 0 ? 3 : 4;
+    int tzSign = *tzShift < 0 ? -1 : 1;
+    //int i = 0;
+    //char buf[20];
     
-    memset(ntpbuffer, 0, MAX_NTP_LENGTH);
-	    
-    ntpbuffer[0] = 0x1B;
+    //this variable stores data received from the LCD
+    u_int* dataReceived;
 
-    sendto(0, ntpbuffer, MAX_NTP_LENGTH, servip, NTP_PORT);
+    //this flag is used to indicate whether the cursor has a char above it
+    cursorFull = 0;
 
-    while (!received)
+    //clear the credString
+    memset(credString, 0, 20*sizeof(char));
+
+    //reset input text position
+    credPosition = 0;
+
+    clearScreen();
+
+    //draw title text
+    selectFont(2);
+    setColor(0xC0); //blue
+    setLocation(5, 7);
+    printString("Please enter your UTC shift:");
+
+    //draw enter button
+    setLocation(180, 0);
+    drawBox(60, 27);
+    setLocation(191, 6);
+    printString("Submit");
+
+    //draw text field
+    setLocation(30, 30);
+    drawBox(180, 21);
+
+    //draw cursor
+    setLocation(38, 46);
+    drawLine(46, 46);
+
+    keyboardDraw(tzKeyMode);
+/*    sprintf(buf, "%d", abs(*tzShift));
+ - 
+ -     for (i = 0; i < strlen(buf); ++i)
+ -     {
+ - 	char tmp[2];
+ - 	tmp[0] = buf[i];
+ - 	tmp[1] = 0;
+ - 	
+ - 	credPrint(tmp);
+ - 	credNext();
+ -     }*/
+
+    while(1)
     {
-	if ((len = getSn_RX_RSR(0)) > 0)
+	if(LCD_read(dataReceived))
 	{
-	    uint8 destip[4];
-	    uint16 destport;
+	    //when a button is pressed, process the command accordingly
+	    if(*dataReceived == NUM33 || *dataReceived == NUM34) //row 1 column 1
+	    {
+		credPrint("1");
 
-	    len = recvfrom(0, ntpbuffer, len, destip, &destport);
-	    received = 1;
+		credNext();
+	    }
+	    else if(*dataReceived == NUM35 || *dataReceived == NUM36) //row 1 column 2
+	    {
+		credPrint("2");
+
+		credNext();
+	    }
+	    else if(*dataReceived == NUM37 || *dataReceived == NUM38) //row 1 column 3
+	    {
+		credPrint("3");
+
+		credNext();
+	    }
+	    else if(*dataReceived == NUM49 || *dataReceived == NUM50) //row 2 column 1
+	    {
+		credPrint("4");
+
+		credNext();
+	    }
+	    else if(*dataReceived == NUM51 || *dataReceived == NUM52) //row 2 column 2
+	    {
+		credPrint("5");
+
+		credNext();
+	    }
+	    else if(*dataReceived == NUM53 || *dataReceived == NUM54) //row 2 column 3
+	    {
+		credPrint("6");
+
+		credNext();
+	    }
+	    else if(*dataReceived == NUM65 || *dataReceived == NUM66) //row 3 column 1
+	    {
+		credPrint("7");
+
+		credNext();
+	    }
+	    else if(*dataReceived == NUM67 || *dataReceived == NUM68) //row 3 column 2
+	    {
+		credPrint("8");
+
+		credNext();
+	    }
+	    else if(*dataReceived == NUM69 || *dataReceived == NUM70) //row 3 column 3
+	    {
+		credPrint("9");
+
+		credNext();
+	    }
+	    else if(*dataReceived == NUM81 || *dataReceived == NUM82) //row 4 column 1
+	    {
+		tzSign *= -1;
+		//printf("Resetting LCD usart connection...\n");
+		LCD_close();
+		LCD_init();
+		//printf("LCD usart connection reset\n");
+		if(tzKeyMode == 3) tzKeyMode = 4;
+		else if(tzKeyMode == 4) tzKeyMode = 3;
+		keyboardDraw(tzKeyMode);
+	    }
+	    else if(*dataReceived == NUM83 || *dataReceived == NUM84) //row 4 column 2
+	    {
+		credPrint("0");
+
+		credNext();
+	    }
+	    else if(*dataReceived == NUM85 || *dataReceived == NUM86) //row 4 column 3
+	    {
+		credRemove();
+	    }
+	    else if(*dataReceived <= NUM7) //submit button
+	    {
+		if(cursorFull == 1) sprintf(credString, "%s%s", credString, credAdd);
+				    
+		//printf("The timezone string is:\n");
+		//printf("%s\n", credString);
+
+		*tzShift = tzSign * atoi(credString);
+
+		updateTZ();
+		
+		showOptions(); //go to the options screen if the options button is pressed
+		
+		return;
+	    }
 	}
     }
+}
 
-    close(0);
+//the main function containing the main loop
+int main()
+{
+    //this is a string used for debugging
+    char debug_string[40];
+    
+    //this variable stores data received from the LCD
+    u_int* dataReceived;
 
-    secsptr = (unsigned int *)&(ntpbuffer[40]);
+    //initialize flags, turn off alarm and set mode to main screen
+    soundAlarm = 0;
+    currentMode = 0;
 
-    return SWAP32(*secsptr);
+    //make space for the various string
+    credString = (char *)calloc(20, sizeof(char));
+    //usernameString = (char *)calloc(40, sizeof(char));
+    //passwordString = (char *)calloc(20, sizeof(char));
+
+    //init the weight sensors
+    setupWeightSensors();
+
+    //init the LCD over the usart
+    LCD_init();
+
+    //clear the screen
+    setColor(0xFF);
+    clearScreen();
+    
+    //initialize the clock
+    dateTimeInit();
+
+    // read current date and time from Internet source and store in RTC
+    sync();
+
+    //read current date and time
+    dateTimeRead();
+
+    // display the main screen
+    mainScreen();
+    
+    //the main loop
+    while(1)
+    {
+	if(currentMode == 0) //if part implements the main screen functionality
+	{
+	    //read button press data from the LCD
+	    if(LCD_read(dataReceived))
+	    {
+		//////////////////////////////DEBUG/////////////////////////////////
+		sprintf(debug_string, "dataReceived is: %d\n", *dataReceived);
+		dprint(debug_string);
+		////////////////////////////////////////////////////////////////////
+	
+		if(*dataReceived <= NUM38)
+		{
+		    //printf("Resetting LCD usart connection...\n");
+		    LCD_close();
+		    LCD_init();
+		    //printf("LCD usart connection reset\n");
+		}
+		//toggle the LCD light when the light button is pressed
+		if(*dataReceived == NUM80 || *dataReceived == NUM81)
+		{
+		    //toggle light and button text
+		    selectFont(2);
+ 		    setColor(0xFF);
+ 		    setLocation(1, 131);
+		    fillBox(59, 28);
+		    setColor(0xC0); //blue
+		    setLocation(8, 138);
+		    if(lightStatus == 0)
+		    {
+			lightOn();
+			lightStatus = 1;
+			
+			printString("Light Off");
+		    }
+		    else
+		    {
+			lightOff();
+			lightStatus = 0;
+			setColor(0xC0); //blue
+			setLocation(8, 138);
+			printString("Light On");
+		    }
+		}
+		/* else if(*dataReceived == NUM82 || *dataReceived == NUM83)
+		{
+		    currentMode = 1; //update to weather mode
+		    showWeather(); //go to the weather screen
+		    continue;
+		    } */ /* forget about weather for now */
+		else if(*dataReceived == NUM82 || *dataReceived == NUM83 || *dataReceived == NUM84)
+		{
+		    currentMode = 2; //update to options mode
+		    showOptions(); //go to the options screen if the options button is pressed
+		    continue;
+		}
+		else if(*dataReceived == NUM85 || *dataReceived == NUM86)
+		{
+		    sync();
+		    mainScreen();
+		}
+	    }
+
+	    checkRtcValidity();
+    
+	    //read current date and time
+	    dateTimeRead();
+	    
+	    //update time display
+	    printTime();
+    
+	    //update date display
+	    printDate();
+
+	    /* sync every hour */
+	    if (myRTC->time_int.min == 0)
+		sync();
+    
+	    //check if the alarm should be set off
+	    checkAlarm();
+	} //end of currentMode == 0 (main screen)
+
+	if(currentMode == 1) //implements the functionality of the weather screen
+	{
+	    //read button press data from the LCD
+	    if(LCD_read(dataReceived))
+	    {
+		//if the back to main screen button is pressed, go back to the main screen
+		if(*dataReceived >= NUM80 && *dataReceived <= NUM86)
+		{
+		    currentMode = 0;
+		    // display the main screen
+		    mainScreen();
+		    continue;
+		}
+	    }    
+	} //end of currentMode == 1 (weather)
+
+	if(currentMode == 2) //implements the functionality of the options screen
+	{   
+	    //read button press data from the LCD
+	    if(LCD_read(dataReceived))
+	    {
+		//if username button is pressed, prompt user to enter username
+		if(*dataReceived >= NUM17 && *dataReceived <= NUM21)
+		{
+		    credEntry(0);
+		}
+		//if password button is pressed, prompt user to enter password
+		else if(*dataReceived >= NUM33 && *dataReceived <= NUM37)
+		{
+		    credEntry(1);
+		}
+		//if time zone button is pressed, prompt user to enter time zone
+		else if(*dataReceived >= NUM49 && *dataReceived <= NUM53)
+		{
+		    timezoneEntry();
+		}
+		//if back button is pressed, go back to the main screen
+		else if(*dataReceived >= NUM65 && *dataReceived <= NUM69)
+		{
+		    currentMode = 0;
+		    // display the main screen
+		    mainScreen();
+		    continue;
+		}
+	    }
+	    
+	} //end of currentMode == 2 (options)
+	
+    } //while(1)
+    
 }
