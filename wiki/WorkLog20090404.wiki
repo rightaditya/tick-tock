@@ -1,0 +1,14 @@
+#summary Work log for April 3, 2009.
+#labels Log
+
+  * Touch was fixed (problem was due to invalid RTC settings) but then broke again.
+  * Timezone problem fixed.
+  * Weight sensors are set up.
+  * Synchronizing is being done on the hour, every hour.
+  * Alarms are being read properly, but there still isn't an eight-hour buffer.
+  * So we still need to:
+    * Fix touch
+    * Fix the date (12 AM incorrectly displays as 12 PM - I've hardcoded the time so that it is set to a 12AM-range time)
+    * Get the program into flash
+    * Write the report
+    * Get the presentation done and plan the demo
