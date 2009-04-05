@@ -7,9 +7,7 @@
   * Synchronizing is being done on the hour, every hour.
   * Alarms are being read properly, but there still isn't an eight-hour buffer.
   * So we still need to:
-    * Fix touch (most works, but when entering in a new username it crashes)
-    * test alarms
-    * Try to fix the sync button, pressing it never works and always hits Options or Light.
+    * Try to fix the LCD touch screw-ups button, pressing it never works and always hits Options or Light.  Same goes for the "Back" button in the text entry screens.
     * Add an eight-hour buffer period for all syncs except the first so that any calendar changes before eight hours from sync time are ignored - and the user should be allowed to change the timezone but this can't be allowed to affect when the alarm will go off (if it was originally going to occur within the next eight hours)
     * Fix the date (12 AM incorrectly displays as 12 PM - I've hardcoded the time so that it is set to a 12AM-range time)
     * Get the program into flash
