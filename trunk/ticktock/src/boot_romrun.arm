@@ -1,0 +1,287 @@
+;*
+;* AT91EB55 Bootup Code
+;* Pawel Pytlak
+;* February 7, 2007
+;*
+;* Parts based on Atmel CStartup Datasheet and its "examples" provided
+;* This code comes AS IS without warranty or condition of any kind. Yadda yadda yada.
+;* If it breaks anything its not my fault and I am not responsible or liable for anything.
+;*
+;
+; Code modified by Nancy Minderman to add conditional assembly for FIQs
+; added documentation and added runtime stuff 
+; February, 2008
+; 
+
+; February 2009
+; Corrected placement of switch to userland and turning on of ints in 
+; userland. Removed FIQ code.
+
+	.file "boot_romrun.arm"
+	.include "defs.inc"
+	.align 4
+	.nothumb
+	.section ".boot", .text
+
+	HACK_DELAY	.equ  		200000
+
+	.globl __main							; stupid linker - appease Ghs Multi so it doesn't load its stupid crap (does it really do something?  read somewhere that declaring this causes multi not to load its __main)
+__main:
+
+	.globl _boot_vector_table				; global for stupid map file so we can see where it is
+	.globl _boot_reset						; beginning of boot code - this will be located at 0x00000020 on startup not at 0x01000020 as defined by linker
+
+; initial vector table on ROM
+_boot_vector_table:							; all initial interrupt vectors branch to boot routine
+	b _boot_reset							; Reset
+	b _boot_reset							; Undefined Instruction
+	b _boot_reset							; Software Interrupt
+	b _boot_reset							; Prefetch Abort
+	b _boot_reset							; Data Abort
+	b _boot_reset							; Reserved
+	b _boot_reset							; IRQ
+	b _boot_reset							; FIQ
+
+; make multi/exlr happy
+	.type _boot_vector_table, $function
+	.size _boot_vector_table, .-_boot_vector_table
+
+_boot_reset:
+; disable interrupts
+	msr		CPSR_c, #ARM_MODE_SYS | I_BIT | F_BIT
+
+; initialize i/o lines for debugging purposes
+	ldr		r12, _boot_piob_base			; get PIOB base address
+	mov		r10, #LEDS						; get all leds mask
+	str		r10, [r12, #PIO_PER]			; enable pins for PIO function (is redundant after reset but just in case docs not correct)
+	str		r10, [r12, #PIO_OER]			; enable LED PIO lines for output operation
+	str		r10, [r12, #PIO_SODR]			; make sure all leds are off
+	
+	mov		r10, #LED1						; light the first led to indicate entry into boot program
+	str		r10, [r12, #PIO_CODR]
+
+; copy vector table from flash rom into beginning of memory
+	mov		r8, #INT_RAM_BASE_BR			; load address of internal ram location before remap command
+	add		r9, pc, #(vector_table-.-8)		; get the real vector table address not what linker says it is
+
+	ldmia	r9!, {r0-r7}					; load contents of vector table based at r9 to registers r0-r7
+	stmia	r8!, {r0-r7}					; store registers to begining of memory region
+	ldmia	r9!, {r0-r4}					; load addresses of interrupt handlers to registers
+	stmia	r8!, {r0-r4}					; store addresses of interrupt handlers underneath new vector table
+
+;	ldr		r12, _boot_piob_base			; get PIOB base address
+	mov		r10, #LED2						; light second led to indicate copy of vector table
+	str		r10, [r12, #PIO_CODR]
+
+; initialize flash rom chip select & memory for faster access time and specify base addresses as provided by link script
+	add		r8, pc, #(_boot_ebi_cs0cfg-.-8)	; load chip select configuration table address
+	ldr		r9, [pc,#(_boot_ebi_base-.-8)]	; get EBI register base address
+	ldmia	r8!, {r0-r7}					; load actual CS configuration
+	stmia	r9!, {r0-r7}					; store configuration
+
+;	ldr		r12, _boot_piob_base			; get PIOB base address
+	mov		r10, #LED3						; light third led to indicate setting of CS parameters
+	str		r10, [r12, #PIO_CODR]
+
+; perform memory controller setup & address space remap
+	mov		r0, #EBI_RCB					; get remap command
+	ldr		r1, [pc,#(_boot_ebi_base-.-8)]	; get EBI register base address
+	ldr		r12, _boot_start_addr			; load the next instruction address stored
+	str		r0, [r1, #EBI_RCR]				; perform remap command
+
+	mov		pc, r12							; jump to newly remapped address
+
+; store address where to jump to after remap
+_boot_start_addr:
+	.word		_boot_remapped_start		; store address of next instruction as specified by linker
+
+	.import __rambase						; these values are defined in link script and are
+	.import __rombase						; generated at link time
+
+_boot_ebi_base:
+	.word	EBI_BASE						; store local copy of constants so they can be											
+_boot_piob_base:							; accessed easily before remap occurs
+	.word	PIOB_BASE
+
+	; the following chip select configuration words MUST remain grouped together in order!
+_boot_ebi_cs0cfg:
+	.word	__rombase + EBI_DBW_16 + EBI_NWS_3 + EBI_WSE + EBI_PAGES_16M + EBI_TDF_2 + EBI_CSEN
+_boot_ebi_cs1cfg:
+	.word	__rambase + EBI_DBW_16 + EBI_NWS_1 + EBI_WSE + EBI_PAGES_16M + EBI_CSEN
+_boot_ebi_cs2cfg:
+	.word	0x20000000						; modify these as required in your user code
+_boot_ebi_cs3cfg:							; do not change them here unless you
+	.word	0x30000000						; are positive that it must be here
+_boot_ebi_cs4cfg:
+	.word	0x40000000
+_boot_ebi_cs5cfg:
+	.word	0x50000000
+_boot_ebi_cs6cfg:
+	.word	0x60000000
+_boot_ebi_cs7cfg:
+	.word	0x70000000
+
+	
+; default runtime vector table loaded by boot program
+; do not modify this vector table to add your routines here! this is not the right spot
+
+vector_table:
+	ldr		pc, [pc, #0x018]				; Reset
+	ldr		pc, [pc, #0x018]				; Undefined Instruction
+	ldr		pc, [pc, #0x018]				; Software Interrupt
+	ldr		pc, [pc, #0x018]				; Prefetch Abort
+	ldr		pc, [pc, #0x018]				; Data Abort
+	nop										; Reserved
+	ldr		pc, [pc, #-0xF20]				; IRQ
+	ldr		pc, [pc, #-0xF20]				; FIQ
+
+; because absolute jumps are not allowed from vector table,
+; jump done through by PC relative loading of address located here
+	.import	reset_handler
+	.import	undef_ins_handler
+	.import	sw_irq_handler
+	.import	pf_abort_handler
+	.import	data_abort_handler
+
+	.word	reset_handler					; allocate a word that holds the address of the reset handler
+	.word	undef_ins_handler				; allocate a word that holds the address of the undefined instr. handler
+	.word	sw_irq_handler					; allocate a word that holds the sw interrupt handler
+	.word	pf_abort_handler				; allocate a word that holds the pf abort handler
+	.word	data_abort_handler				; allocate a word that holds the data abort handler
+
+_boot_remapped_start:						; we are now in rom address space as specified by link script
+
+	ldr		r12, =PIOB_BASE
+	mov		r10, #LED5						; light fifth led to mark remap procedure completion
+	str		r10, [r12, #PIO_CODR]
+
+; initialize Oscillator
+	ldr		r0, =(APMC_MOSC_EN | 47 << APMC_OSCOUNT_OFFSET)	; OSCOUNT = (1.4ms/30µs)
+	ldr		r1, =APMC_BASE					; Get the APMC Base Address
+	str		r0, [r1, #APMC_CGMR]			; set clock configuration
+
+	mov		r4, #APMC_MOSCS					; load main oscillator bit
+_boot_wait_osc								; wait until oscillator runs stably
+	ldr		r2, [r1, #APMC_SR]				; read oscillator status
+	and		r2, r2, r4						; mask out main oscillator status
+	cmp		r2, #APMC_MOSCS					; test status
+	bne		_boot_wait_osc					; busy wait until ready
+
+; transfer over from slow to newly initialized main oscillator
+	orr		r0, r0, #APMC_CSS_MOSC			; main oscillator output selection
+	str		r0, [r1, #APMC_CGMR]			; set clock configuration
+
+; set up the phased locked loop with phase loop factor = 1 & pll lock counter = 3)
+	ldr		r2, =((1 << APMC_MUL_OFFSET) | (3 << APMC_PLLCOUNT_OFFSET))
+	orr		r0, r0, r2
+	str		r0, [r1, #APMC_CGMR]			; set clock configuration
+
+	mov		r4, #APMC_PLL_LOCK				; load pll bit
+_boot_wait_pll								; wait until pll runs stably
+	ldr		r3, [r1, #APMC_SR]				; read oscillator status
+	and		r3, r3, r4						; mask out pll bit
+	cmp		r3, #APMC_PLL_LOCK				; test status
+	bne		_boot_wait_pll					; busy wait until ready
+
+; switch from main oscillator to PLL
+	mvn		r2, #APMC_CSS_MOSC				; create old oscillator exclusion mask
+	and		r0, r0, r2						; mask out old oscillator selection bit
+	orr		r0, r0, #APMC_CSS_PLL			; select phase locked loop
+	str		r0, [r1, #APMC_CGMR]			; set clock configuration
+
+	mov		r10, #LED6						; light sixth led to mark oscillator configuration completion
+	str		r10, [r12, #PIO_CODR]
+	
+; initialize stack for each arm processor mode
+	.import __supr_stack_begin
+	ldr		r0, =__supr_stack_begin
+
+	; set stack for FIQ mode
+	msr		CPSR_c, #ARM_MODE_FIQ | I_BIT | F_BIT
+	mov		sp, r0							; set the stack
+	sub		r0, r0, #FIQ_STACK_SIZE			; adjust for the stack size
+
+	; set stack for IRQ mode
+	msr		CPSR_c, #ARM_MODE_IRQ | I_BIT | F_BIT
+	mov		sp, r0							; set the stack
+	sub		r0, r0, #IRQ_STACK_SIZE			; adjust for the stack size
+
+	; set stack for ABORT mode
+	msr		CPSR_c, #ARM_MODE_ABORT | I_BIT | F_BIT
+	mov		sp, r0							; set the stack
+	sub		r0, r0, #ABT_STACK_SIZE			; adjust for the stack size
+
+	; set stack for Undefined mode
+	msr		CPSR_c, #ARM_MODE_UNDEF | I_BIT | F_BIT
+	mov		sp, r0							; set the stack
+	sub		r0, r0, #UND_STACK_SIZE			; adjust for the stack size
+
+	; set stack for supervisor mode
+	msr		CPSR_c, #ARM_MODE_SVC | I_BIT | F_BIT
+	mov		sp, r0							; supervisor mode gets all of the remaining stack space
+
+	
+	mov 	r10, #LED7						; light seventh led to mark end of stack initialization
+	str		r10, [r12, #PIO_CODR]
+
+	
+; zero out uninitialized data space
+	.import __bssstart						; this value is set based on the linker script romrun.ld
+	.import __bssend						; and is finalized at link time
+	
+	ldr		r0, =__bssstart					; load bss start address
+	ldr		r1, =__bssend					; load bss end address
+	mov		r2, #0							; initialize register with 0 to write to memory location(s)
+_boot_zero_bss:
+	cmp		r0, r1							; check if we still have memory regions to zero out
+	strcc	r2, [r0], #4					; if we do, write a 0 to that location and increment address pointer by 4 bytes
+	bcc		_boot_zero_bss					; check if we have even more memory to zero out
+
+; copy initialized data from ROM to RAM
+	.import __datastart
+	.import __dataend
+	.import __romdatastart
+	
+	ldr		r0, =__datastart				; load start address of initialized data in ram
+	ldr		r1, =__dataend					; load end address of initialized data in ram
+	ldr		r2, =__romdatastart				; load start address of where to get initialized data
+	
+_boot_copy_init:
+	cmp		r0, r1							; check if we still have more words to copy from rom to ram
+	ldrcc	r3, [r2], #4					; if we do, load them from rom and increment rom address pointer by 4
+	strcc	r3, [r0], #4					; if we do, write them to ram and increment ram address pointer by 4
+	bcc		_boot_copy_init					; check if we have even more memory to zero out
+
+; now lets turn FIQs/IRQs on to see if anything blows up
+	msr		CPSR_c, #ARM_MODE_USER 
+
+; initialize user mode stack
+	ldr		sp, =__user_stack_begin			; initialize user mode stack pointer
+	
+; go to main function
+_boot_main_branch:
+	mov 	r10, #LED8						; light eight led to mark end of memory initialization and beginning of user program
+	str		r10, [r12, #PIO_CODR]
+
+
+	ldr		r0, =HACK_DELAY
+delay_for_LEDS:								; put in a short delay so we can actually see the init LEDS
+	subs	r0, r0, #1						
+	bne		delay_for_LEDS
+	
+
+	
+	.import main
+	ldr		r0, =main						; load address of program's main routine
+	mov		lr, pc							; store copy of current program counter in link register
+	bx		r0								; branch to main routine
+
+; should program end, loop indefinitely
+_boot_end:									; prevent execution in non code space should program exit
+	b		_boot_end
+
+	.type _boot_reset, $function
+	.size _boot_reset, .-_boot_reset
+
+; EOF!
+.end
