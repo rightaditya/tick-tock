@@ -1,9 +1,9 @@
 #summary Work log for April 4, 2009.
 #labels Log
 
-  * Implemented the eight-hour buffer
-  * Implemented scrolling status text on sync screen
-  * Unable to reproduce touch problems.
+  * Implemented the eight-hour buffer.
+  * Implemented scrolling status text on sync screen.
+  * Freeman was unable to reproduce touch problems.
   * Tested everything to make sure it all works in RAM.
-  * Fried something, that's for sure.  Tested each component individually.  Ethernet doesn't work, everything else does.
+  * Our regulators get quite hot.  They were left running for too long, and it looks like the Ethernet module is fried.  Everything else seems to work, however (we individually tested all components).
   * Finished the report.
