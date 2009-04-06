@@ -443,14 +443,6 @@ void sync()
 
     at91_time_rtc_write(myRTC);
 
-    nextAlarm.year = 2009;
-    nextAlarm.month = 4;
-    nextAlarm.day = 5;
-    nextAlarm.starthour = 0;
-    nextAlarm.startminute = 12;
-    nextAlarm.endhour = 1;
-    nextAlarm.endminute = 12;
-
     //update the eight hour alarm buffer if needed
     updateAlarmBuffer();
     //update the time of the most recent sync
