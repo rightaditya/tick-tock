@@ -1,3 +1,12 @@
+/***************************************************
+ * Aditya Bhargava, Freeman Fan
+ *
+ * these functions are used to communicate with
+ * servers on the Internet to obtain the current
+ * time as well as a user's calendar alarm info
+ * from a Google Calendar server
+ **************************************************/
+
 #include <string.h>
 
 #include "parts/m55800/reg_m55800.h"
@@ -21,6 +30,7 @@ static uint8 mac[6] = {0x00, 0x08, 0xDC, 0x00, 111, 200};      // for setting SH
 //this indicates where to print on the screen
 int rowLocation;
 
+//prints a line of status information on the sync screen
 void printLine(char* outputString)
 {
     rowLocation += 15;
@@ -30,6 +40,10 @@ void printLine(char* outputString)
     printString(outputString);
 }
 
+//this function connects to a time server to obtain the current time
+//expressed in UTC seconds, then connects to Google using the
+//specified user name and magic cookie to retrieve calendar
+//alarm information
 unsigned int netSync()
 {
     char outputString[40];
@@ -212,6 +226,7 @@ unsigned int netSync()
     return UTCsecs;
 }
 
+//this function returns the IP address of the target server
 void dns(char *dnsname, int ipoffset, uint8 *servip)
 {
     uint8 i = 0, dnsbuffer[MAX_DNS_LENGTH];
@@ -259,6 +274,7 @@ void dns(char *dnsname, int ipoffset, uint8 *servip)
     memmove(servip, dnsbuffer + ipoffset, 4);
 }
 
+//this function retrieves the user's calendar alarm info from Google
 int gcal(uint8 *servip, char *bigbuffer)
 {
     uint32 len;
@@ -325,6 +341,8 @@ int gcal(uint8 *servip, char *bigbuffer)
     return i;
 }
 
+//this function gets the time from a time serving using the
+//NTP protocol, in UTC seconds format
 unsigned int ntp(uint8 *servip)
 {
     uint8 ntpbuffer[MAX_NTP_LENGTH];
