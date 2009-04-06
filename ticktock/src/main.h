@@ -1,3 +1,10 @@
+/******************************************************
+ * Aditya Bhargava, Freeman Fan
+ *
+ * This files contains all constants used in the
+ * Tick-Tock program
+ *****************************************************/
+
 #ifndef MAIN_H
 #define MAIN_H
 //Constant definitions

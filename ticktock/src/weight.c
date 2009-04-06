@@ -1,3 +1,13 @@
+/*****************************************************
+ * Aditya Bhargava, Freeman Fan
+ *
+ * this function communicates with the weight sensors
+ * over the ADC to determine the amount of force
+ * applied to these sensors. If the amount of force
+ * falls within a specific window, the alarm is
+ * triggered
+ *****************************************************/
+
 #ifdef SEMIHOSTING
 #include <stdio.h>
 #endif
@@ -13,12 +23,15 @@ void beepOn();
 
 extern int alarmSounding;
 
+//this function opens a connection to the ADC
 void setupWeightSensors()
 {
     at91_pio_open(&PIOB_DESC, PIOB0_MASK, PIO_OUTPUT);
     beepOff();
 }
 
+//check the amount of force applied to the weight sensors
+//and determine whether the alarm should be active
 int alarmActive(double lowerThresh, double upperThresh)
 {
     int i = 0;
@@ -59,12 +72,14 @@ int alarmActive(double lowerThresh, double upperThresh)
     return retVal;
 }
 
+//turn on the speaker
 void beepOff()
 {
     at91_pio_write(&PIOB_DESC, PIOB0_MASK, PIO_CLEAR_OUT);
     alarmSounding = 0;
 }
 
+//turn off the speaker
 void beepOn()
 {
     at91_pio_write(&PIOB_DESC, PIOB0_MASK, PIO_SET_OUT);

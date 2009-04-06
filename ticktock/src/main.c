@@ -1,7 +1,7 @@
 //*----------------------------------------------------------------------------
 //* TICK-TOCK Project Main Program
 //*
-//* Freeman Fan, Aditya Bhargava
+//* Aditya Bhargava, Freeman Fan
 //* CMPE 490 Winter Term 2009
 //*
 //* This program provides a variety of touch screen LCD control functions
@@ -97,6 +97,7 @@ void LCD_close()
     at91_usart_close(&USART1_DESC);
 }
 
+//this function resets the LCD connection
 void LCD_reset()
 {
     LCD_close();
@@ -303,6 +304,8 @@ void updateAlarmBuffer()
     //then we clean up the alarms in the buffer that are in the past
 }
 
+//this function updates the next alarm info stored by getting the
+//closest future alarm in the alarm buffer
 void updateNextAlarm()
 {
     Alarm *alarm = (Alarm *)NVR_ALARM_BUFFER;
@@ -396,8 +399,6 @@ void sync()
 
     secsSince20090401 = (UTCsecs - SECSUPTO20090401) + 60 * 60 * (*tzShift); // + 60 * 60 * (*tzShift)
 
-    //secsSince20090401 = 353374 - 7200;
-
     //read time and date values online
     currentYear = (secsSince20090401/86400) / 365 + 2009;
     currentMonth = (secsSince20090401/86400) % 365 + 1;
@@ -442,6 +443,14 @@ void sync()
 
     at91_time_rtc_write(myRTC);
 
+    nextAlarm.year = 2009;
+    nextAlarm.month = 4;
+    nextAlarm.day = 5;
+    nextAlarm.starthour = 0;
+    nextAlarm.startminute = 12;
+    nextAlarm.endhour = 1;
+    nextAlarm.endminute = 12;
+
     //update the eight hour alarm buffer if needed
     updateAlarmBuffer();
     //update the time of the most recent sync
@@ -453,6 +462,7 @@ void sync()
     updateNextAlarm();
 }
 
+//this function updates the time zone info stored
 void updateTZ(int newTZ)
 {
     //these variables are used to save the date and time values
@@ -1236,32 +1246,6 @@ void credEntry(int credMode)
     drawLine(46, 46);
 
     keyboardDraw(keyMode);
-    
-/*    if (credMode == 0)
- -     {
- - 	for (i = 0; i < strlen(usernameString); ++i)
- - 	{
- - 	    char tmp[2];
- - 	    tmp[0] = usernameString[i];
- - 	    tmp[1] = 0;
- - 	    printf("strlen: %d\n", i);
- - 	    
- - 	    credPrint(tmp);
- - 	    credNext();
- - 	}
- -     }
- -     else if (credMode == 1)
- -     {
- - 	for (i = 0; i < strlen(passwordString); ++i)
- - 	{
- - 	    char tmp[2];
- - 	    tmp[0] = passwordString[i];
- - 	    tmp[1] = 0;
- - 	    
- - 	    credPrint(tmp);
- - 	    credNext();
- - 	}
- -     }*/
 
     while(1)
     {
@@ -1715,6 +1699,7 @@ int main()
 
     //init the LCD over the usart
     LCD_init();
+    lightOn();
 
     //clear the screen
     setColor(0xFF);
