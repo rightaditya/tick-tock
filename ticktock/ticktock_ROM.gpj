@@ -1,0 +1,15 @@
+#!gbuild
+[Program]
+	-startfile=boot_romrun.o
+	-no_auto_interrupt_table
+	-startfile_dir=./objs
+	-D ROMRUN
+	-Onone
+src/main.h
+src/weight.c
+src/network.c
+src/main.c
+src/wiznet/socket.c
+src/wiznet/w5300.c
+src/irqs.arm
+link/romrun.ld

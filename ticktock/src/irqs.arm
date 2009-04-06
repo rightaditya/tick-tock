@@ -1,0 +1,84 @@
+	.file "irqs.arm"
+	.include "defs.inc"
+	.include "periph/aic/irq.mac"
+	.align 4
+	.nothumb
+
+	.globl	reset_handler
+reset_handler:
+	b		reset_handler
+
+	.type reset_handler, $function
+	.size reset_handler, .-reset_handler
+
+
+	.globl	undef_ins_handler
+undef_ins_handler:
+	b		undef_ins_handler
+
+	.type undef_ins_handler, $function
+	.size undef_ins_handler, .-undef_ins_handler
+
+
+	.globl	sw_irq_handler
+sw_irq_handler:
+	b		sw_irq_handler
+
+	.type sw_irq_handler, $function
+	.size sw_irq_handler, .-sw_irq_handler
+
+
+	.globl	pf_abort_handler
+pf_abort_handler:
+	b		pf_abort_handler
+
+	.type pf_abort_handler, $function
+	.size pf_abort_handler, .-pf_abort_handler
+
+
+	.globl	data_abort_handler
+data_abort_handler:
+	b		data_abort_handler
+
+	.type data_abort_handler, $function
+	.size data_abort_handler, .-data_abort_handler
+
+
+	.globl irq_handler
+irq_handler:
+	IRQ_ENTRY 
+	ldr 	r2, =PIOB_BASE	; r2 now contains base of PIOB for LED control
+	mov		r3, #LED1		; LED1 will be my indicator that the handler is being called
+	str		r3,[r2,  #PIO_CODR] ; write into clear directory to turn LED on
+	IRQ_EXIT 
+	.type irq_hander, $function
+	.size irq_handler, .-irq_handler
+
+
+
+	.globl frq_handler
+frq_handler:
+	
+; according to the documentation the exit instruction should be subs pc, lr, #4
+; on entry don't switch modes, but make sure that F bit is set to disable fast interrupts
+; use the banked registers to toggle an LED that is controlled by the external frequency generator
+;
+; turn ints off spsr contains previous state
+	
+	ldr 	r9, =PIOB_BASE	; r9 now contains base of PIOB for LED control
+	mov		r10, #LED2		; LED2 will my indicator that the handler is being called
+	cmp 	r11, #0
+	beq 	led_on
+led_off:
+	str		r10, [r9, #PIO_SODR]
+	mov		r11, #0
+	b 		done
+led_on:
+	str		r10,[r9 ,#PIO_CODR]
+	mov 	r11, #1
+done:
+	subs	pc, lr, #4	; atomic instruction that resets cpsr and returns control to user code
+	.type frq_hander, $function
+	.size frq_handler, .-frq_handler
+
+	.end
