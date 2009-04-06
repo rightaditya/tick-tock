@@ -1,4 +1,4 @@
-#summary Work log for April 3, 2009.
+#summary Work log for April 4, 2009.
 #labels Log
 
   * Touch was fixed (problem was due to invalid RTC settings) but then broke again, and then fixed again (again, RTC issues because Freeman doesn't know where to look).
