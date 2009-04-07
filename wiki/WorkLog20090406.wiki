@@ -1,0 +1,10 @@
+#summary Work log for April 6, 2009.
+#labels Log
+
+  * Finished and handed in the report.  What a waste of paper.
+  * Presentation is (more or less) done.
+  * Tomorrow morning we will do the following:
+    * Rehearse the presentation
+    * Do a run-through of the demonstration
+    * Move the username/password/etc. copy code to a more appropriate location
+    * Try to fix the touch
