@@ -1,4 +1,4 @@
-#summary Work log for April 4, 2009.
+#summary Work log for April 5, 2009.
 #labels Log
 
   * Implemented the eight-hour buffer.
