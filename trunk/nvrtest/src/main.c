@@ -2,7 +2,12 @@
 #include <stdio.h>
 #endif
 
+#include "parts/m55800/lib_m55800.h"
 #include "parts/m55800/reg_m55800.h"
+#include "periph/adc/lib_adc.h"
+
+#define WEIGHT_SAMPLES 10
+#define PIOB0_MASK 0x00000001
 
 #define NVR_BASE 0x20000000
 #define MEM_SIZE 0x200000
@@ -15,7 +20,7 @@ int main()
     unsigned char *start = NULL, *end = NULL;
 
     setup();
-
+    
     start = 0x0;
     while (start < NVR_BASE || end > NVR_BASE + MEM_SIZE || start >= end)
     {   
