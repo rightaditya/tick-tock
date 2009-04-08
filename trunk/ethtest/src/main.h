@@ -1,9 +1,16 @@
+/******************************************************
+ * Aditya Bhargava, Freeman Fan
+ *
+ * This files contains all constants used in the
+ * Tick-Tock program
+ *****************************************************/
+
 #ifndef MAIN_H
 #define MAIN_H
 //Constant definitions
 
 /******************** For the LCD ********************/
-#define DEBUG_MODE	//this is defined when we are running the program from RAM
+//#define DEBUG_MODE	//this is defined when we are running the program from RAM
 #define FLASH_SHIFT	16 //number of places to shift touch detection constants when running in flash
 
 //the following are integers reprentating the regions of the LCD screen
@@ -109,6 +116,7 @@
 #define NVR_PASSWORD (NVR_BASE + 0x40)
 #define NVR_TZSHIFT (NVR_BASE + 0x80)
 #define NVR_ALARMS (NVR_BASE + 0xA0)
+#define NVR_ALARM_BUFFER (NVR_BASE + 0x1000)
 #define NVR_BUFFER_AREA (NVR_BASE + (NVR_SIZE >> 1))
 #define NVR_BUFFER_SIZE (NVR_BASE + NVR_SIZE - NVR_BUFFER_AREA)
 
@@ -159,4 +167,11 @@ typedef struct
     int year, month, day, starthour, startminute, endhour, endminute;
 } Alarm;
 
+typedef struct
+{
+    int date, hour, minute, firstRun;
+} timeStruct;
+
 #endif
+
+
