@@ -1,3 +1,12 @@
+/***************************************************
+ * Aditya Bhargava, Freeman Fan
+ *
+ * these functions are used to communicate with
+ * servers on the Internet to obtain the current
+ * time as well as a user's calendar alarm info
+ * from a Google Calendar server
+ **************************************************/
+
 #include <string.h>
 
 #include "parts/m55800/reg_m55800.h"
@@ -18,8 +27,26 @@ static uint8 gw[4] = {192, 168, 0, 1};                     // for setting GAR re
 static uint8 sn[4] = {255, 255, 255, 0};                     // for setting SUBR register
 static uint8 mac[6] = {0x00, 0x08, 0xDC, 0x00, 111, 200};      // for setting SHAR register
 
+//this indicates where to print on the screen
+int rowLocation;
+
+//prints a line of status information on the sync screen
+void printLine(char* outputString)
+{
+    rowLocation += 15;
+    setLocation(10, rowLocation);
+    selectFont(2);
+    setColor(0xC0); //red
+    printString(outputString);
+}
+
+//this function connects to a time server to obtain the current time
+//expressed in UTC seconds, then connects to Google using the
+//specified user name and magic cookie to retrieve calendar
+//alarm information
 unsigned int netSync()
 {
+    char outputString[40];
     unsigned int UTCsecs = 0;
     uint8 tx_mem_conf[8] = {8, 8, 8, 8, 8, 8, 8, 8};          // for setting TMSR regsiter
     uint8 rx_mem_conf[8] = {8, 8, 8, 8, 8, 8, 8, 8};          // for setting RMSR regsiter
@@ -30,6 +57,7 @@ unsigned int netSync()
     char *bigbuffer = (char *)NVR_BUFFER_AREA;
     int gdatasize = 0;
     char *sptr;
+    rowLocation = 35;
 
     memmove(ntpdnsfixed, NTP_SERVER_DNS_NAME, 22); ntpdnsfixed[9] = 8;
     memset(servip, 0, 4);
@@ -51,8 +79,9 @@ unsigned int netSync()
     /* allocate internal TX/RX Memory of W5300 */
     if(!sysinit(tx_mem_conf,rx_mem_conf))           
     {
-       printf("MEMORY CONFIG ERR.\r\n");
-       while(1);
+	sprintf(outputString, "MEMORY CONFIG ERR.\r");
+	printLine(outputString);
+	while(1);
     }
 
     setMR(getMR()|MR_FS); /* Tell the wiznet to adjust for endianness */
@@ -75,18 +104,21 @@ unsigned int netSync()
 
     dns(ntpdnsfixed, NTP_SERVER_DNS_IP_OFFSET, servip);
 
-    printf("Returned IP: %d.%d.%d.%d\n", servip[0], servip[1], servip[2], servip[3]);    
+    sprintf(outputString, "Returned IP: %d.%d.%d.%d", servip[0], servip[1], servip[2], servip[3]);
+    printLine(outputString);
 
     if (servip[0] == 0)
 	memmove(servip, defaultntp, 4);
 
     UTCsecs = ntp(servip);
 
-    printf("UTC time in seconds: %u\n", UTCsecs);
+    sprintf(outputString, "UTC time in seconds: %u", UTCsecs);
+    printLine(outputString);
 
     dns(GOOGLE_DNS_NAME, GOOGLE_DNS_IP_OFFSET, servip);
 
-    printf("Returned IP: %d.%d.%d.%d\n", servip[0], servip[1], servip[2], servip[3]);
+    sprintf(outputString, "Returned IP: %d.%d.%d.%d", servip[0], servip[1], servip[2], servip[3]);
+    printLine(outputString);
 
     if (servip[0] == 0)
 	memmove(servip, defaultgoogle, 4);
@@ -95,12 +127,25 @@ unsigned int netSync()
 
     numberOfAlarms = 0;
     if (gdatasize < 0)
-	printf("Got too many bytes from Google!\n");
+    {
+	sprintf(outputString, "Got too many bytes from Google!");
+	printLine(outputString);
+    }
     else
     {
 	Alarm *alarm = (Alarm *)NVR_ALARMS;
 	
-	printf("Got %d bytes from Google\n", gdatasize);
+	sprintf(outputString, "Got %d bytes from Google", gdatasize);
+	printLine(outputString);
+
+	if(gdatasize > 200 && gdatasize < 500)
+	{
+	    printLine("Invalid user name/magic cookie");
+	    printLine("Please enter correct user name and");
+	    printLine("magic cookie values in Option");
+	    wait_10ms(800);
+	}
+	else printLine("Synchronization Successful");
     
 	sptr = strstr(bigbuffer, ALARM_ACTIVE_STRING);
     
@@ -181,6 +226,7 @@ unsigned int netSync()
     return UTCsecs;
 }
 
+//this function returns the IP address of the target server
 void dns(char *dnsname, int ipoffset, uint8 *servip)
 {
     uint8 i = 0, dnsbuffer[MAX_DNS_LENGTH];
@@ -228,6 +274,7 @@ void dns(char *dnsname, int ipoffset, uint8 *servip)
     memmove(servip, dnsbuffer + ipoffset, 4);
 }
 
+//this function retrieves the user's calendar alarm info from Google
 int gcal(uint8 *servip, char *bigbuffer)
 {
     uint32 len;
@@ -294,6 +341,8 @@ int gcal(uint8 *servip, char *bigbuffer)
     return i;
 }
 
+//this function gets the time from a time serving using the
+//NTP protocol, in UTC seconds format
 unsigned int ntp(uint8 *servip)
 {
     uint8 ntpbuffer[MAX_NTP_LENGTH];

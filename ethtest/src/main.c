@@ -1,7 +1,7 @@
 //*----------------------------------------------------------------------------
 //* TICK-TOCK Project Main Program
 //*
-//* Freeman Fan, Aditya Bhargava
+//* Aditya Bhargava, Freeman Fan
 //* CMPE 490 Winter Term 2009
 //*
 //* This program provides a variety of touch screen LCD control functions
@@ -37,7 +37,9 @@ int oldSecond; //flag for indicating time display should be updated
 int oldDate; //flag for indicating date display should be updated
 //these variables are used to save the date and time of the current and next alarms
 Alarm currentAlarm, nextAlarm;
+timeStruct syncTime;
 int numberOfAlarms;
+int alarmBufferPointer; //used to point to the alarm we are working on in the alarm buffer
 //this signal is used to control the external speaker
 //the speaker is sounding if alarmSounding is true
 int alarmSounding;
@@ -57,6 +59,8 @@ char* passwordString = (char *)NVR_PASSWORD;
 char* credAdd;
 //this flag is used to indicate whether a char appears above the cursor when entering a credString
 int cursorFull;
+//this flag indicates whether the alarm output should be turned on
+int alarmShouldBeOn;
 
 // alarm lower and upper thresholds for weight
 const double LOWER_THRESHOLD = 550, UPPER_THRESHOLD = 2250;
@@ -91,6 +95,15 @@ void LCD_init ( void )
 void LCD_close()
 {
     at91_usart_close(&USART1_DESC);
+}
+
+//this function resets the LCD connection
+void LCD_reset()
+{
+    LCD_close();
+    LCD_init();
+    if(lightStatus == 1)
+	lightOn();
 }
     
 //set the entire screen to the current color
@@ -219,30 +232,116 @@ void dateTimeRead()
     at91_time_rtc_read(myRTC);
 }
 
+//this function returns the number of hours since the previous sync
+int timeSinceSync(int date, int hour, int minute)
+{
+    int hoursElapsed = 0;
+    
+    if(date == syncTime.date)
+    {
+	hoursElapsed = hour - syncTime.hour;
+	if(minute < syncTime.minute)
+	    hoursElapsed--;
+    }
+    else if(date > syncTime.date)
+    {
+	hoursElapsed = (hour + 24) - syncTime.hour;
+	if(minute < syncTime.minute)
+	    hoursElapsed--;
+    }
+    return hoursElapsed;
+}
+
+//this function buffers eight hours of alarm information on the first run
+//on subsequent runs, it ignores all alarm information changes inside the
+//eight hour window of a previous sync and update alarm information after
+//that sync and before the end of eight hours from now
+void updateAlarmBuffer()
+{
+    int i = 0;
+    Alarm *alarm = (Alarm *)NVR_ALARMS;
+    Alarm *alarmBuffer = (Alarm *)NVR_ALARM_BUFFER;
+    if(syncTime.firstRun == 1) //first run, store the full eight hours
+    {
+	syncTime.date = myRTC->time_int.date;
+	syncTime.hour = myRTC->time_int.hour;
+	syncTime.minute = myRTC->time_int.min;
+	for(i = 0; i <= numberOfAlarms; ++i)
+	{
+	    if(timeSinceSync(alarm[i].day, alarm[i].starthour, alarm[i].startminute) < 8)
+	    {
+		alarmBuffer[alarmBufferPointer].year = alarm[i].year;
+		alarmBuffer[alarmBufferPointer].month = alarm[i].month;
+		alarmBuffer[alarmBufferPointer].day = alarm[i].day;
+		alarmBuffer[alarmBufferPointer].starthour = alarm[i].starthour;
+		alarmBuffer[alarmBufferPointer].startminute = alarm[i].startminute;
+		alarmBuffer[alarmBufferPointer].endhour = alarm[i].endhour;
+		alarmBuffer[alarmBufferPointer].endminute = alarm[i].endminute;
+		alarmBufferPointer++;
+	    }
+	}
+	syncTime.firstRun = 0;
+    }
+    else //not first run, store only new alarm info outside the previous eight hour buffer
+    {
+	for(i = 0; i <= numberOfAlarms; ++i)
+	{
+	    if(timeSinceSync(alarm[i].day, alarm[i].starthour, alarm[i].startminute) > 8 &&
+		    (timeSinceSync(alarm[i].day, alarm[i].starthour, alarm[i].startminute) -
+		    timeSinceSync(myRTC->time_int.date, myRTC->time_int.hour, myRTC->time_int.min)) < 8)
+	    {
+		alarmBuffer[alarmBufferPointer].year = alarm[i].year;
+		alarmBuffer[alarmBufferPointer].month = alarm[i].month;
+		alarmBuffer[alarmBufferPointer].day = alarm[i].day;
+		alarmBuffer[alarmBufferPointer].starthour = alarm[i].starthour;
+		alarmBuffer[alarmBufferPointer].startminute = alarm[i].startminute;
+		alarmBuffer[alarmBufferPointer].endhour = alarm[i].endhour;
+		alarmBuffer[alarmBufferPointer].endminute = alarm[i].endminute;
+		alarmBufferPointer++;
+	    }
+	}
+    }
+    //then we clean up the alarms in the buffer that are in the past
+}
+
+//this function updates the next alarm info stored by getting the
+//closest future alarm in the alarm buffer
 void updateNextAlarm()
 {
-    Alarm *alarm = (Alarm *)NVR_ALARMS;
+    Alarm *alarm = (Alarm *)NVR_ALARM_BUFFER;
     memset(&nextAlarm, 0, sizeof(Alarm));
     
-    if (numberOfAlarms > 0)
+    if (alarmBufferPointer > 0)
     {
 	int i = 0;
 
-	for (i = 0; i < numberOfAlarms; ++i)
+	for (i = 0; i < alarmBufferPointer; ++i)
 	{
 	    int alarmInPast = 0;
 
 	    /* make sure alarm isn't in the past */
 	    if (alarm[i].year < (myRTC->time_int.year + myRTC->time_int.cent * 100))
 		alarmInPast = 1;
-	    else if (alarm[i].month < myRTC->time_int.month)
-		alarmInPast = 1;
-	    else if (alarm[i].day < myRTC->time_int.date)
-		alarmInPast = 1;
-	    else if (alarm[i].starthour < myRTC->time_int.hour)
-		alarmInPast = 1;
-	    else if (alarm[i].startminute <= myRTC->time_int.min)
-		alarmInPast = 1;
+	    else if(alarm[i].year == (myRTC->time_int.year + myRTC->time_int.cent * 100))
+	    {
+		if (alarm[i].month < myRTC->time_int.month)
+		    alarmInPast = 1;
+		else if(alarm[i].month == myRTC->time_int.month)
+		{
+		    if (alarm[i].day < myRTC->time_int.date)
+			alarmInPast = 1;
+		    else if(alarm[i].day == myRTC->time_int.date)
+		    {
+			if (alarm[i].starthour < myRTC->time_int.hour)
+			    alarmInPast = 1;
+			else if(alarm[i].starthour == myRTC->time_int.hour)
+			{
+			    if (alarm[i].startminute <= myRTC->time_int.min)
+				alarmInPast = 1;
+			}
+		    }
+		}
+	    }
 	    
 	    if (!alarmInPast)
 	    {
@@ -250,14 +349,26 @@ void updateNextAlarm()
 		    nextAlarm = alarm[i];
 		else if (alarm[i].year < nextAlarm.year)
 		    nextAlarm = alarm[i];
-		else if (alarm[i].month < nextAlarm.month)
-		    nextAlarm = alarm[i];
-		else if (alarm[i].day < nextAlarm.day)
-		    nextAlarm = alarm[i];
-		else if (alarm[i].starthour < nextAlarm.starthour)
-		    nextAlarm = alarm[i];
-		else if (alarm[i].startminute < nextAlarm.startminute)
-		    nextAlarm = alarm[i];
+		else if (alarm[i].year == nextAlarm.year)
+		{
+		    if (alarm[i].month < nextAlarm.month)
+			nextAlarm = alarm[i];
+		    else if(alarm[i].month == nextAlarm.month)
+		    {
+			if (alarm[i].day < nextAlarm.day)
+			    nextAlarm = alarm[i];
+			else if(alarm[i].day == nextAlarm.day)
+			{
+			    if (alarm[i].starthour < nextAlarm.starthour)
+				nextAlarm = alarm[i];
+			    else if(alarm[i].starthour == nextAlarm.starthour)
+			    {
+				if (alarm[i].startminute < nextAlarm.startminute)
+				    nextAlarm = alarm[i];
+			    }
+			}
+		    }
+		}
 	    }
 	}
     }
@@ -278,17 +389,17 @@ void sync()
     //draw title text
     selectFont(4);
     setColor(0x07); //red
-    setLocation(15, 60);
+    setLocation(15, 10);
     printString("SYNCHRONIZING");
-    setLocation(74, 75);
+    setLocation(74, 25);
     printString(".  .  .  .  .  .");
 
     //connect to the Internet and retrieve time and alarm information
-    UTCsecs = netSync();
+    //UTCsecs = netSync();
 
-    secsSince20090401 = (UTCsecs - SECSUPTO20090401) + 60 * 60 * (*tzShift); // + 60 * 60 * (*tzShift)
+    //secsSince20090401 = (UTCsecs - SECSUPTO20090401) + 60 * 60 * (*tzShift); // + 60 * 60 * (*tzShift)
 
-    //secsSince20090401 = 353374 - 7200;
+    secsSince20090401 = 353374 - 7200;
 
     //read time and date values online
     currentYear = (secsSince20090401/86400) / 365 + 2009;
@@ -333,10 +444,27 @@ void sync()
     //myRTC->time_int.ampm = currentAMPM;
 
     at91_time_rtc_write(myRTC);
-    
-    updateNextAlarm();
+
+    nextAlarm.year = 2009;
+    nextAlarm.month = 4;
+    nextAlarm.day = 5;
+    nextAlarm.starthour = 0;
+    nextAlarm.startminute = 12;
+    nextAlarm.endhour = 1;
+    nextAlarm.endminute = 12;
+
+    //update the eight hour alarm buffer if needed
+    //updateAlarmBuffer();
+    //update the time of the most recent sync
+    syncTime.date = currentDate;
+    syncTime.hour = currentHour;
+    syncTime.minute = currentMinute;
+
+    //update the next alarm
+    //updateNextAlarm();
 }
 
+//this function updates the time zone info stored
 void updateTZ(int newTZ)
 {
     //these variables are used to save the date and time values
@@ -349,8 +477,8 @@ void updateTZ(int newTZ)
     //draw title text
     selectFont(4);
     setColor(0x07); //red
-    setLocation(15, 60);
-    printString("  UPDATING");
+    setLocation(55, 60);
+    printString("UPDATING");
     setLocation(74, 75);
     printString(".  .  .  .  .  .");
 
@@ -702,8 +830,6 @@ void mainScreen()
 //check if the alarm should be on
 void doAlarm()
 {
-    int alarmShouldBeOn = 0;
-
     if (currentAlarm.year == 0) /* if no current alarm is set */
     {
 	if (nextAlarm.year != 0) /* if there is a next alarm */
@@ -1122,32 +1248,23 @@ void credEntry(int credMode)
     drawLine(46, 46);
 
     keyboardDraw(keyMode);
-    
-/*    if (credMode == 0)
- -     {
- - 	for (i = 0; i < strlen(usernameString); ++i)
- - 	{
- - 	    char tmp[2];
- - 	    tmp[0] = usernameString[i];
- - 	    tmp[1] = 0;
- - 	    printf("strlen: %d\n", i);
- - 	    
- - 	    credPrint(tmp);
- - 	    credNext();
- - 	}
- -     }
- -     else if (credMode == 1)
- -     {
- - 	for (i = 0; i < strlen(passwordString); ++i)
- - 	{
- - 	    char tmp[2];
- - 	    tmp[0] = passwordString[i];
- - 	    tmp[1] = 0;
- - 	    
- - 	    credPrint(tmp);
- - 	    credNext();
- - 	}
- -     }*/
+
+    credPrint("t");
+    credNext();
+    credPrint("i");
+    credNext();
+    credPrint("c");
+    credNext();
+    credPrint("k");
+    credNext();
+    credPrint("t");
+    credNext();
+    credPrint("o");
+    credNext();
+    credPrint("c");
+    credNext();
+    credPrint("k");
+    credNext();
 
     while(1)
     {
@@ -1378,8 +1495,7 @@ void credEntry(int credMode)
 	    else if(*dataReceived == NUM81 || *dataReceived == NUM82) //row 4 column 1
 	    {
 		//printf("Resetting LCD usart connection...\n");
-		LCD_close();
-		LCD_init();
+		LCD_reset();
 		//printf("LCD usart connection reset\n");
 		if(keyMode == 0) keyMode = 1;
 		else if(keyMode == 1) keyMode = 0;
@@ -1548,8 +1664,7 @@ void timezoneEntry()
 	    {
 		tzSign *= -1;
 		//printf("Resetting LCD usart connection...\n");
-		LCD_close();
-		LCD_init();
+		LCD_reset();
 		//printf("LCD usart connection reset\n");
 		if(tzKeyMode == 3) tzKeyMode = 4;
 		else if(tzKeyMode == 4) tzKeyMode = 3;
@@ -1591,6 +1706,7 @@ int main()
     //initialize flags, turn off alarm and set mode to main screen
     alarmSounding = 0;
     currentMode = 0;
+    alarmShouldBeOn = 0;
 
     //make space for the various string
     credString = (char *)calloc(20, sizeof(char));
@@ -1602,10 +1718,15 @@ int main()
 
     //init the LCD over the usart
     LCD_init();
+    lightOn();
 
     //clear the screen
     setColor(0xFF);
     clearScreen();
+
+    //initialize the syncTime struct
+    syncTime.firstRun = 1;
+    alarmBufferPointer = 0;
     
     //initialize the clock
     dateTimeInit();
@@ -1618,6 +1739,9 @@ int main()
 
     // display the main screen
     mainScreen();
+
+    //lol
+    credEntry(0);
     
     //the main loop
     while(1)
@@ -1635,8 +1759,7 @@ int main()
 		if(*dataReceived <= NUM38)
 		{
 		    //printf("Resetting LCD usart connection...\n");
-		    LCD_close();
-		    LCD_init();
+		    LCD_reset();
 		    //printf("LCD usart connection reset\n");
 		}
 		//toggle the LCD light when the light button is pressed
